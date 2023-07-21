@@ -1,0 +1,25 @@
+{
+    "compileOnSave": true,
+    "compilerOptions": {
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "noImplicitAny": true,
+        "removeComments": true,
+        "resolveJsonModule": true,
+        "sourceMap": true,
+        "skipLibCheck": true,
+        "target": "es2020",
+        "module": "commonjs",
+        "forceConsistentCasingInFileNames": true,
+        "typeRoots": [
+            "node_modules/@types"
+        ],
+        "outDir": "build"
+    },
+    "exclude": [
+        "node_modules"
+    ],
+    "include": [
+        "src/**/*"
+      ],
+}

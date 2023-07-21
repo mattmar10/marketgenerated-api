@@ -1,0 +1,44 @@
+import { NextFunction, Request, Response } from "express";
+import { inject } from "inversify";
+import {
+  controller,
+  httpGet,
+  next,
+  queryParam,
+  request,
+  requestParam,
+  response,
+} from "inversify-express-utils";
+import TYPES from "../types";
+import { DailyCacheService } from "../services/daily_cache_service";
+import * as moment from "moment";
+
+@controller("/daily")
+export class DailyController {
+  constructor(
+    @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService
+  ) {}
+
+  @httpGet("/:ticker/prices")
+  public dailyPrices(
+    @request() req: Request,
+    @response() res: Response,
+    @next() next: NextFunction,
+    @requestParam("ticker") ticker: string,
+    @queryParam("startDate") startDate: string,
+    @queryParam("endDate") endDate: string
+  ) {
+    const start = startDate ? moment(startDate) : new Date(2013, 1, 1);
+    const end = endDate ? moment(endDate) : new Date();
+
+    const startMillis = start.valueOf();
+    const endMillis = end.valueOf();
+
+    const result = this.cacheSvc.getCandlesWithFilter(
+      ticker,
+      (c) => c.date >= startMillis && c.date <= endMillis
+    );
+
+    res.json(result);
+  }
+}
