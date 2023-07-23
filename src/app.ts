@@ -9,7 +9,7 @@ import { DailyCacheService } from "./services/daily_cache_service";
 import { SymbolService } from "./services/symbol_service";
 import { OverviewService } from "./services/overview/overview-service";
 
-import "./controllers/daily-controller";
+import "./controllers/daily/daily-controller";
 import "./controllers/overview/overview-controller";
 import "./controllers/health-controller";
 

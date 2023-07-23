@@ -25,6 +25,7 @@ import {
   formatDateToEST,
 } from "../utils/epoch_utils";
 import axios from "axios";
+import { parseBooleanEnv } from "../utils/env_var_utils";
 
 interface CacheEntry {
   symbol: Ticker;
@@ -35,10 +36,15 @@ interface CacheEntry {
 export class DailyCacheService {
   private TIINGO_URL = "https://api.tiingo.com/tiingo";
   private tiingoKey = process.env.TIINGO_KEY;
+  private fetchNewCandles: boolean;
   private candles: Map<Ticker, Candle[]>;
 
   constructor(@inject(TYPES.S3Client) private s3Client: S3Client) {
     this.candles = new Map<Ticker, Candle[]>();
+    this.fetchNewCandles = parseBooleanEnv(
+      process.env.CACHE_FETCH_NEW_CANDLES,
+      false
+    );
   }
 
   public getCandles(symbol: Ticker): Candle[] {
@@ -91,8 +97,9 @@ export class DailyCacheService {
         const endDate = formatDateToEST(today);
 
         if (
-          startDate !== endDate ||
-          (startDate == endDate && today.getHours() > 17)
+          this.fetchNewCandles &&
+          (startDate !== endDate ||
+            (startDate == endDate && today.getHours() > 17))
         ) {
           const additionalCandles = await this.getDailyCandlesFromTiingo(
             symbol,
