@@ -50,3 +50,14 @@ export interface MarketDailyMovers {
   stockMovers: DailyActivesAndMovers;
   etfMovers: DailyActivesAndMovers;
 }
+
+export interface DailySectorOverview {
+  sector: string;
+  meanDayReturn: number;
+  medianDayReturn: number;
+  allReturns: number[];
+}
+
+export interface DailySectorsOverview {
+  sectors: DailySectorOverview[];
+}

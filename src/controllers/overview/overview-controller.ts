@@ -37,4 +37,10 @@ export class OverviewController {
     const movers = this.overviewSvc.getDailyMarketMovers();
     res.json(movers);
   }
+
+  @httpGet("/sectors")
+  public sectors(@request() req: Request, @response() res: Response) {
+    const sectors = this.overviewSvc.getDailySectorOverview();
+    res.json(sectors);
+  }
 }

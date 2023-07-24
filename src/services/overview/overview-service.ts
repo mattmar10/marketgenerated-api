@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import TYPES from "../../types";
-import { EtfHoldingInfo, SymbolService } from "../symbol_service";
+import { EtfHoldingInfo, StockSymbol, SymbolService } from "../symbol_service";
 import { DailyCacheService } from "../daily_cache_service";
 import { Candle } from "../../modles/candle";
 import {
@@ -10,8 +10,11 @@ import {
   DailyMover,
   MarketDailyMovers,
   DailyActivesAndMovers,
+  DailySectorOverview,
+  DailySectorsOverview,
 } from "../../controllers/overview/overview-responses";
 import { Ticker } from "../../MarketGeneratedTypes";
+import { calculateMedian } from "../../utils/math_utils";
 
 @injectable()
 export class OverviewService {
@@ -104,7 +107,14 @@ export class OverviewService {
   private getOverview(etfTicker: Ticker, etfHoldings: EtfHoldingInfo[]) {
     const candles: Candle[] = this.cacheSvc.getCandles(etfTicker);
     const returns = this.calculateDailyReturns(candles);
-    const sorted = candles.sort((c: Candle) => c.date);
+    const sorted = [...candles].sort((a, b) => {
+      if (a.date > b.date) {
+        return 1;
+      } else if (a.date < b.date) {
+        return -1;
+      }
+      return 0;
+    });
     const [head, tail] = sorted.slice(-2);
     const lastChange = tail.close - head.close;
 
@@ -142,7 +152,14 @@ export class OverviewService {
     if (!candles || candles.length < 2) {
       return undefined;
     }
-    const sorted = candles.sort((c) => c.date);
+    const sorted = [...candles].sort((a, b) => {
+      if (a.date > b.date) {
+        return 1;
+      } else if (a.date < b.date) {
+        return -1;
+      }
+      return 0;
+    });
     const [head, tail] = sorted.slice(-2);
 
     return (tail.close - head.close) / head.close;
@@ -153,7 +170,15 @@ export class OverviewService {
     now.setHours(0, 0, 0, 0);
     const oneYearAgo = now.getTime() - 52 * 7 * 24 * 60 * 60 * 1000;
 
-    const sorted = candles.sort((a, b) => a.date - b.date);
+    const sorted = [...candles].sort((a, b) => {
+      if (a.date > b.date) {
+        return 1;
+      } else if (a.date < b.date) {
+        return -1;
+      }
+      return 0;
+    });
+
     return sorted.filter((candle) => {
       return candle.date >= oneYearAgo && candle.date <= now.getTime();
     });
@@ -234,5 +259,76 @@ export class OverviewService {
     };
 
     return marketMovers;
+  }
+
+  public getDailySectorOverview(): DailySectorsOverview {
+    type StockSymbolWithReturn = StockSymbol & {
+      dayReturn: number;
+    };
+
+    const lastCloseDate = Math.max(
+      ...this.cacheSvc.getCandles("SPY").map((c) => c.date)
+    );
+
+    const stocks = this.symbolSvc.getStocks();
+    const stockKeys = stocks.map((s) => s.symbol);
+
+    const sectorMap: Map<string, StockSymbolWithReturn[]> = new Map();
+
+    for (const k of stockKeys) {
+      const candles = this.cacheSvc.getCandles(k);
+
+      if (
+        candles &&
+        candles.length > 1 &&
+        candles[candles.length - 1].date == lastCloseDate
+      ) {
+        const found = stocks.find((s) => s.symbol === k);
+        const foundSector = found.sector ? found.sector : "NA";
+        const returns = this.calculateDailyReturns(candles);
+
+        const inMap = sectorMap.get(foundSector);
+
+        if (inMap) {
+          const stockWithReturn = {
+            ...found,
+            dayReturn: returns,
+          };
+          inMap.push(stockWithReturn);
+        } else {
+          sectorMap.set(foundSector, [
+            {
+              ...found,
+              dayReturn: returns,
+            },
+          ]);
+        }
+      }
+    }
+
+    const sectors = Array.from(sectorMap.keys());
+
+    const mapped = sectors.map((s) => {
+      const symbolsWithReturns = sectorMap.get(s);
+      const allReturns = symbolsWithReturns.map((swr) => swr.dayReturn);
+
+      const returnsSum = allReturns.reduce((acc, val) => acc + val, 0);
+      const meanReturn = returnsSum / allReturns.length;
+      const medianReturn = calculateMedian(allReturns);
+
+      const overview: DailySectorOverview = {
+        sector: s,
+        meanDayReturn: Number(meanReturn.toFixed(4)),
+        medianDayReturn: Number(medianReturn.toFixed(4)),
+        allReturns: allReturns.map((r) => Number(r.toFixed(4))),
+      };
+
+      return overview;
+    });
+
+    const dailySectorsOverview: DailySectorsOverview = {
+      sectors: mapped,
+    };
+    return dailySectorsOverview;
   }
 }
