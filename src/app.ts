@@ -13,6 +13,7 @@ import "./controllers/daily/daily-controller";
 import "./controllers/overview/overview-controller";
 import "./controllers/health-controller";
 import "./controllers/search/search-controller";
+import { SearchService } from "./services/search/search_service";
 
 // Load environment variables from .env file
 (async () => {
@@ -73,6 +74,11 @@ import "./controllers/search/search-controller";
   container
     .bind<OverviewService>(TYPES.OverviewService)
     .to(OverviewService)
+    .inSingletonScope();
+
+  container
+    .bind<SearchService>(TYPES.SearchService)
+    .to(SearchService)
     .inSingletonScope();
 
   server.setConfig((app) => {

@@ -78,7 +78,7 @@ export class OverviewService {
     //build movers
     for (const k of allKeys) {
       if (universeOfStockKeys.includes(k)) {
-        const name = stocks.find((s) => s.symbol === k).name;
+        const name = stocks.find((s) => s.symbol === k)!.name;
         const candles = this.cacheSvc.getCandles(k);
         const filtered = this.filterCandlesPast52Weeks(candles);
 
@@ -88,7 +88,7 @@ export class OverviewService {
         const mover: DailyMover = buildMoverRow(k, name, filtered);
         stockMovers.push(mover);
       } else if (universeOfEtfKeys.includes(k)) {
-        const name = etfs.find((s) => s.symbol === k).companyName;
+        const name = etfs.find((s) => s.symbol === k)!.companyName;
         const candles = this.cacheSvc.getCandles(k);
         const filtered = this.filterCandlesPast52Weeks(candles);
 
@@ -141,7 +141,7 @@ export class OverviewService {
     const overview: ETFDailyOverview = {
       symbol: etfTicker,
       lastCandle: tail,
-      lastReturn: Number(returns.toFixed(4)),
+      lastReturn: Number(returns!.toFixed(4)),
       lastChange: Number(lastChange.toFixed(4)),
       holdingReturns: allReturns,
     };
@@ -284,8 +284,16 @@ export class OverviewService {
         candles[candles.length - 1].date == lastCloseDate
       ) {
         const found = stocks.find((s) => s.symbol === k);
+        if (!found) {
+          continue;
+        }
+
         const foundSector = found.sector ? found.sector : "NA";
         const returns = this.calculateDailyReturns(candles);
+
+        if (!returns) {
+          continue;
+        }
 
         const inMap = sectorMap.get(foundSector);
 
@@ -308,13 +316,20 @@ export class OverviewService {
 
     const sectors = Array.from(sectorMap.keys());
 
-    const mapped = sectors.map((s) => {
+    const mapped: DailySectorOverview[] = sectors.flatMap((s) => {
       const symbolsWithReturns = sectorMap.get(s);
-      const allReturns = symbolsWithReturns.map((swr) => swr.dayReturn);
+      if (!symbolsWithReturns) {
+        return [];
+      }
 
+      const allReturns = symbolsWithReturns.map((swr) => swr.dayReturn);
       const returnsSum = allReturns.reduce((acc, val) => acc + val, 0);
       const meanReturn = returnsSum / allReturns.length;
       const medianReturn = calculateMedian(allReturns);
+
+      if (!medianReturn) {
+        return [];
+      }
 
       const overview: DailySectorOverview = {
         sector: s,
@@ -323,7 +338,7 @@ export class OverviewService {
         allReturns: allReturns.map((r) => Number(r.toFixed(4))),
       };
 
-      return overview;
+      return [overview]; // Return an array with the overview object inside
     });
 
     const dailySectorsOverview: DailySectorsOverview = {
