@@ -13,7 +13,9 @@ import "./controllers/daily/daily-controller";
 import "./controllers/overview/overview-controller";
 import "./controllers/health-controller";
 import "./controllers/search/search-controller";
+import "./controllers/screener/screener-controller";
 import { SearchService } from "./services/search/search_service";
+import { ScreenerService } from "./services/screener/screener-service";
 
 // Load environment variables from .env file
 (async () => {
@@ -79,6 +81,11 @@ import { SearchService } from "./services/search/search_service";
   container
     .bind<SearchService>(TYPES.SearchService)
     .to(SearchService)
+    .inSingletonScope();
+
+  container
+    .bind<ScreenerService>(TYPES.ScreenerService)
+    .to(ScreenerService)
     .inSingletonScope();
 
   server.setConfig((app) => {
