@@ -69,7 +69,13 @@ export class SymbolService {
   private qqqURL =
     "https://marketgenerated.s3.amazonaws.com/etf-holdings/QQQ.csv";
 
-  constructor() {}
+  constructor() {
+    this.stocks = [];
+    this.etfs = [];
+    this.diaHoldings = [];
+    this.qqqHoldings = [];
+    this.spyHoldings = [];
+  }
 
   public getStocks(): StockSymbol[] {
     return this.stocks;

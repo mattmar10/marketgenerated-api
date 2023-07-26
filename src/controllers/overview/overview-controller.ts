@@ -1,21 +1,15 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express";
 import { inject } from "inversify";
 import {
   controller,
   httpGet,
-  next,
-  queryParam,
   request,
-  requestParam,
   response,
 } from "inversify-express-utils";
-import TYPES from "../../types";
 import { DailyCacheService } from "../../services/daily_cache_service";
 import { OverviewService } from "../../services/overview/overview-service";
-import {
-  ETFHoldingPriceReturn,
-  ETFOverviewPriceReturns,
-} from "./overview-responses";
+import TYPES from "../../types";
+import { ETFOverviewPriceReturns } from "./overview-responses";
 
 @controller("/overview")
 export class OverviewController {
