@@ -1,8 +1,15 @@
 import { inject, injectable } from "inversify";
-import TYPES from "../types";
-import { Ticker } from "../MarketGeneratedTypes";
+import * as Papa from "papaparse";
+import { Readable } from "stream";
 import axios from "axios";
 import * as z from "zod";
+import {
+  FMPSymbolProfileData,
+  FMPTradableSymbolArray,
+} from "./financial_modeling_prep_types";
+import { parse } from "dotenv";
+
+const FMP_BASE_URL = "https://financialmodelingprep.com/api";
 
 const etfSymbolSchema = z.object({
   symbol: z.string(),
@@ -51,8 +58,10 @@ export interface EtfHoldingInfo {
 
 @injectable()
 export class SymbolService {
-  private stocks: StockSymbol[];
-  private etfs: EtfSymbol[];
+  private stocks: FMPSymbolProfileData[];
+  private etfs: FMPSymbolProfileData[];
+  private allSymbols: FMPSymbolProfileData[];
+
   private diaHoldings: EtfHoldingInfo[];
   private qqqHoldings: EtfHoldingInfo[];
   private spyHoldings: EtfHoldingInfo[];
@@ -77,11 +86,11 @@ export class SymbolService {
     this.spyHoldings = [];
   }
 
-  public getStocks(): StockSymbol[] {
+  public getStocks(): FMPSymbolProfileData[] {
     return this.stocks;
   }
 
-  public getEtfs(): EtfSymbol[] {
+  public getEtfs(): FMPSymbolProfileData[] {
     return this.etfs;
   }
 
@@ -123,18 +132,28 @@ export class SymbolService {
     const stocksResponse = axios.get(this.stocksURL);
     const etfsResponse = axios.get(this.etfsURL);
 
+    const profileData = SymbolService.fetchSymbolProfileData();
+
     try {
-      const all = await Promise.all([stocksResponse, etfsResponse]);
+      const all = await Promise.all([
+        stocksResponse,
+        etfsResponse,
+        profileData,
+      ]);
 
-      const stocksJson = all[0].data;
-      const stocks: StockSymbol[] =
-        nasdaqStockSymbolsSchema.parse(stocksJson).data.rows;
-      this.stocks = stocks;
+      const parsedProfileData = all[2].filter(
+        (pd) =>
+          pd.isActivelyTrading == true && pd.VolAvg > 50000 && pd.Price > 3
+      );
 
-      const etfsJson = all[1].data;
-      const etfs: EtfSymbol[] =
-        nasdaqEtfSymbolsSchema.parse(etfsJson).data.data.rows;
-      this.etfs = etfs;
+      console.log(`Discovered ${parsedProfileData.length} symbols`);
+
+      this.allSymbols = parsedProfileData;
+      this.stocks = parsedProfileData.filter((pd) => !pd.isEtf && !pd.isFund);
+
+      console.log(`Discovered ${this.stocks.length} stocks`);
+      this.etfs = parsedProfileData.filter((pd) => pd.isEtf);
+      console.log(`Discovered ${this.etfs.length} etfs`);
     } catch (err) {
       console.error(`cannot fetch universe of symbols`, err);
       process.exit(1);
@@ -160,6 +179,40 @@ export class SymbolService {
     } catch (err) {
       console.error(`cannot fetch etf holdings`, err);
       process.exit(1);
+    }
+  }
+
+  private static async fetchSymbolProfileData(): Promise<
+    FMPSymbolProfileData[]
+  > {
+    const financialModelingPrepKey = process.env.FINANCIAL_MODELING_PREP_KEY;
+    const url = `${FMP_BASE_URL}/v4/profile/all?apikey=${financialModelingPrepKey}`;
+
+    try {
+      const response = await axios.get(url);
+
+      // The CSV data will be available in response.data
+      const csvData: string = response.data;
+
+      // Parse the CSV data using papaparse with dynamicTyping option
+      const parsedData: Papa.ParseResult<FMPSymbolProfileData> =
+        Papa.parse<FMPSymbolProfileData>(csvData, {
+          header: true,
+          skipEmptyLines: true,
+          dynamicTyping: true,
+          transformHeader: (header) => header.trim(),
+        });
+
+      if (parsedData.errors && parsedData.errors.length > 0) {
+        throw new Error(`Error parsing CSV: ${parsedData.errors[0].message}`);
+      }
+
+      // The parsed data will be available in parsedData.data
+      return parsedData.data;
+    } catch (error) {
+      // Handle errors
+      console.error("Error fetching or parsing CSV:", error);
+      throw error;
     }
   }
 }

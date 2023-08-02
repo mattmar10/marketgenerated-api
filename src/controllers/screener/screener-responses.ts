@@ -9,6 +9,8 @@ export interface TrendTemplateResult {
   twoHudredMALRSlope: number;
   fiftyTwoWeekHigh: number;
   fiftyTwoWeekLow: number;
+  compositeRelativeStrength: number;
+  percentFrom50MA: number;
 }
 
 export interface TrendTemplateResults {

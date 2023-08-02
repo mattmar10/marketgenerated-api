@@ -5,17 +5,31 @@ import { DailyCacheService } from "../daily_cache_service";
 import { Candle } from "../../modles/candle";
 import {
   ETFDailyOverview,
-  ETFHoldingPriceReturn,
+  ConstituentPriceReturn,
   ETFOverviewPriceReturns,
   DailyMover,
   MarketDailyMovers,
   DailyActivesAndMovers,
   DailySectorOverview,
   DailySectorsOverview,
+  IndexDailyOverview,
+  IndexDailyOverviewPriceReturns,
 } from "../../controllers/overview/overview-responses";
 import { Ticker } from "../../MarketGeneratedTypes";
 import { calculateMedian } from "../../utils/math_utils";
 import { filterCandlesPast52Weeks } from "../../indicators/indicator-utils";
+import {
+  StockIndexConstituentList,
+  isStockIndexConstituentList,
+} from "../stock-index/stock-index-types";
+import { StockIndexService } from "../stock-index/stock-index-service";
+import {
+  FMPHistorical,
+  FMPHistoricalArray,
+} from "../financial_modeling_prep_types";
+import { dateSringToMillisSinceEpochInET } from "../../utils/epoch_utils";
+
+export type OverviewServiceError = string;
 
 @injectable()
 export class OverviewService {
@@ -24,7 +38,8 @@ export class OverviewService {
 
   constructor(
     @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService,
-    @inject(TYPES.SymbolService) private symbolSvc: SymbolService
+    @inject(TYPES.SymbolService) private symbolSvc: SymbolService,
+    @inject(TYPES.StockIndexService) private stockIndexSvc: StockIndexService
   ) {
     this.buildMovers();
   }
@@ -34,10 +49,12 @@ export class OverviewService {
     const stocks = this.symbolSvc.getStocks();
     const cached = this.cacheSvc.getAllData();
 
-    const universeOfStockKeys = stocks.map((s) => s.symbol);
-    const universeOfEtfKeys = etfs.map((e) => e.symbol);
+    const universeOfStockKeys = stocks.map((s) => s.Symbol);
+    const universeOfEtfKeys = etfs.map((e) => e.Symbol);
 
-    const allKeys = cached.keys();
+    const allKeys = Array.from(cached.keys()).filter(
+      (k) => universeOfStockKeys.includes(k) || universeOfEtfKeys.includes(k)
+    );
     const stockMovers = [];
     const etfMovers = [];
 
@@ -79,7 +96,7 @@ export class OverviewService {
     //build movers
     for (const k of allKeys) {
       if (universeOfStockKeys.includes(k)) {
-        const name = stocks.find((s) => s.symbol === k)!.name;
+        const name = stocks.find((s) => s.Symbol === k)!.companyName;
         const candles = this.cacheSvc.getCandles(k);
         const filtered = filterCandlesPast52Weeks(candles);
 
@@ -89,7 +106,7 @@ export class OverviewService {
         const mover: DailyMover = buildMoverRow(k, name, filtered);
         stockMovers.push(mover);
       } else if (universeOfEtfKeys.includes(k)) {
-        const name = etfs.find((s) => s.symbol === k)!.companyName;
+        const name = etfs.find((s) => s.Symbol === k)!.companyName;
         const candles = this.cacheSvc.getCandles(k);
         const filtered = filterCandlesPast52Weeks(candles);
 
@@ -129,7 +146,7 @@ export class OverviewService {
 
       const lastCandle: Candle = candles[candles.length - 1];
 
-      const etfReturn: ETFHoldingPriceReturn = {
+      const etfReturn: ConstituentPriceReturn = {
         symbol: eHolding.ticker,
         dayReturn: Number(dailyReturn.toFixed(4)),
         volume: lastCandle.volume,
@@ -141,6 +158,54 @@ export class OverviewService {
 
     const overview: ETFDailyOverview = {
       symbol: etfTicker,
+      lastCandle: tail,
+      lastReturn: Number(returns!.toFixed(4)),
+      lastChange: Number(lastChange.toFixed(4)),
+      holdingReturns: allReturns,
+    };
+    return overview;
+  }
+
+  private getMajorIndexOverview(
+    indexTicker: Ticker,
+    candles: Candle[],
+    constituents: StockIndexConstituentList
+  ) {
+    console.log(`calculating daily returns for ${indexTicker}`);
+    const returns = this.calculateDailyReturns(candles);
+    const sorted = [...candles].sort((a, b) => {
+      if (a.date > b.date) {
+        return 1;
+      } else if (a.date < b.date) {
+        return -1;
+      }
+      return 0;
+    });
+    const [head, tail] = sorted.slice(-2);
+    const lastChange = tail.close - head.close;
+
+    const allReturns = constituents.flatMap((constituent) => {
+      const candles = this.cacheSvc.getCandles(constituent.symbol);
+      const dailyReturn = this.calculateDailyReturns(candles);
+
+      if (dailyReturn === undefined) {
+        return [];
+      }
+
+      const lastCandle: Candle = candles[candles.length - 1];
+
+      const constReturn: ConstituentPriceReturn = {
+        symbol: constituent.symbol,
+        dayReturn: Number(dailyReturn.toFixed(4)),
+        volume: lastCandle.volume,
+        closeDate: lastCandle.date,
+      };
+
+      return [constReturn];
+    });
+
+    const overview: IndexDailyOverview = {
+      symbol: indexTicker,
       lastCandle: tail,
       lastReturn: Number(returns!.toFixed(4)),
       lastChange: Number(lastChange.toFixed(4)),
@@ -181,6 +246,90 @@ export class OverviewService {
     };
 
     return returnsOverview;
+  }
+
+  public async getIndexOverviewReturns(): Promise<
+    IndexDailyOverviewPriceReturns | OverviewServiceError
+  > {
+    const dowP = this.stockIndexSvc.getConstituents("DOW");
+    const sAndPP = this.stockIndexSvc.getConstituents("SP500");
+    const nasP = this.stockIndexSvc.getConstituents("NS100");
+
+    const indexHistory = this.stockIndexSvc.getHistoricalIndexData();
+
+    const [dow, sp500, nas, history] = await Promise.all([
+      dowP,
+      sAndPP,
+      nasP,
+      indexHistory,
+    ]);
+
+    const isHistoryError = (value: any): value is string => {
+      return typeof value === "string";
+    };
+
+    const mapHistoryToCandles = (history: FMPHistoricalArray) => {
+      return history.map((h) => {
+        const c: Candle = {
+          date: dateSringToMillisSinceEpochInET(h.date),
+          dateStr: h.date,
+          open: h.open,
+          high: h.high,
+          low: h.low,
+          close: h.adjClose,
+          volume: h.volume,
+        };
+        return c;
+      });
+    };
+
+    if (
+      isStockIndexConstituentList(dow) &&
+      isStockIndexConstituentList(sp500) &&
+      isStockIndexConstituentList(nas) &&
+      !isHistoryError(history)
+    ) {
+      const sAndPHistory = history.historicalStockList.find(
+        (h) => h.symbol === "^GSPC"
+      );
+
+      const dowHistory = history.historicalStockList.find(
+        (h) => h.symbol === "^DJI"
+      );
+
+      const nasHistory = history.historicalStockList.find(
+        (h) => h.symbol === "^IXIC"
+      );
+
+      if (!sAndPHistory || !dowHistory || !nasHistory) {
+        return "Unable to fetch index history";
+      } else {
+        const dowOverview = this.getMajorIndexOverview(
+          "^DJI",
+          mapHistoryToCandles(dowHistory.historical),
+          dow
+        );
+        const nasOverview = this.getMajorIndexOverview(
+          "^IXIC",
+          mapHistoryToCandles(nasHistory.historical),
+          nas
+        );
+        const sandPOverview = this.getMajorIndexOverview(
+          "^GSPC",
+          mapHistoryToCandles(sAndPHistory.historical),
+          sp500
+        );
+
+        const returnsOverview: IndexDailyOverviewPriceReturns = {
+          returns: [dowOverview, sandPOverview, nasOverview],
+          lastCloseDate: dowOverview.lastCandle.date,
+        };
+
+        return returnsOverview;
+      }
+    } else {
+      return "Unable to parse constituents or index history";
+    }
   }
 
   public getDailyMarketMovers(count: number = 25): MarketDailyMovers {
@@ -253,7 +402,7 @@ export class OverviewService {
     );
 
     const stocks = this.symbolSvc.getStocks();
-    const stockKeys = stocks.map((s) => s.symbol);
+    const stockKeys = stocks.map((s) => s.Symbol);
 
     const sectorMap: Map<string, StockSymbolWithReturn[]> = new Map();
 
@@ -265,7 +414,7 @@ export class OverviewService {
         candles.length > 1 &&
         candles[candles.length - 1].date == lastCloseDate
       ) {
-        const found = stocks.find((s) => s.symbol === k);
+        const found = stocks.find((s) => s.Symbol === k);
         if (!found) {
           continue;
         }
@@ -279,19 +428,17 @@ export class OverviewService {
 
         const inMap = sectorMap.get(foundSector);
 
+        const stockWithReturn: StockSymbolWithReturn = {
+          symbol: found.Symbol,
+          name: found.companyName,
+          sector: found.sector!,
+          industry: found.industry ? found.industry : "",
+          dayReturn: returns,
+        };
         if (inMap) {
-          const stockWithReturn = {
-            ...found,
-            dayReturn: returns,
-          };
           inMap.push(stockWithReturn);
         } else {
-          sectorMap.set(foundSector, [
-            {
-              ...found,
-              dayReturn: returns,
-            },
-          ]);
+          sectorMap.set(foundSector, [stockWithReturn]);
         }
       }
     }

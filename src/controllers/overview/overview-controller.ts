@@ -26,6 +26,24 @@ export class OverviewController {
     res.json(etfHoldingReturns);
   }
 
+  @httpGet("/index-returns")
+  public async indexReturns(
+    @request() req: Request,
+    @response() res: Response
+  ) {
+    const returnsOrError = await this.overviewSvc.getIndexOverviewReturns();
+
+    const isOverviewError = (value: any): value is string => {
+      return typeof value === "string";
+    };
+
+    if (isOverviewError(returnsOrError)) {
+      res.status(500).json(returnsOrError);
+    }
+
+    res.json(returnsOrError);
+  }
+
   @httpGet("/movers")
   public movers(@request() req: Request, @response() res: Response) {
     const movers = this.overviewSvc.getDailyMarketMovers();

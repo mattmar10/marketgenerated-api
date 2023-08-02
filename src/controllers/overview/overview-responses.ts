@@ -1,7 +1,7 @@
 import { Ticker } from "../../MarketGeneratedTypes";
 import { Candle } from "../../modles/candle";
 
-export interface ETFHoldingPriceReturn {
+export interface ConstituentPriceReturn {
   symbol: Ticker;
   dayReturn: number;
   volume: number;
@@ -13,7 +13,20 @@ export interface ETFDailyOverview {
   lastCandle: Candle;
   lastReturn: number;
   lastChange: number;
-  holdingReturns: ETFHoldingPriceReturn[];
+  holdingReturns: ConstituentPriceReturn[];
+}
+
+export interface IndexDailyOverview {
+  symbol: Ticker;
+  lastCandle: Candle;
+  lastReturn: number;
+  lastChange: number;
+  holdingReturns: ConstituentPriceReturn[];
+}
+
+export interface IndexDailyOverviewPriceReturns {
+  returns: IndexDailyOverview[];
+  lastCloseDate: number;
 }
 
 export interface ETFOverviewPriceReturns {
