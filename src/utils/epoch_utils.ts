@@ -43,3 +43,16 @@ function isEasternDaylightTime(date: Date): boolean {
   // Check if the date falls within the Daylight Saving Time range
   return date >= dstStart && date < dstEnd;
 }
+export function dateSringToMillisSinceEpochInET(dateString: string): number {
+  const date = new Date(dateString);
+  const startOfDay = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+  startOfDay.setHours(0);
+  startOfDay.setMinutes(0);
+  startOfDay.setSeconds(0);
+  startOfDay.setMilliseconds(0);
+  return startOfDay.getTime();
+}

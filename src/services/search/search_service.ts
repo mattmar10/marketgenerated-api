@@ -7,31 +7,47 @@ import {
   SearchResponse,
   StockSymbolResponse,
 } from "../../controllers/search/search-reponses";
+import { FMPSymbolProfileData } from "../financial_modeling_prep_types";
+import { isString } from "../../utils/basic_utils";
 
 @injectable()
 export class SearchService {
   constructor(@inject(TYPES.SymbolService) private symbolSvc: SymbolService) {}
 
   public basicSearch(query: string): SearchResponse {
-    const trimmed = query.trim().toLocaleLowerCase();
+    const trimmed = query.trim().toLowerCase();
     const stocks = this.symbolSvc.getStocks();
     const etfs = this.symbolSvc.getEtfs();
 
     //only search the ticker for exact matches (e.g, F, T, X, etc... )
     if (trimmed.length == 1) {
       const exactStocks: StockSymbolResponse[] =
-        this.genericFilter<StockSymbol>(query, stocks, (s) => s.symbol);
+        this.genericFilter<FMPSymbolProfileData>(
+          query,
+          stocks,
+          (s) => s.Symbol
+        ).map((fmpData) => {
+          const res: StockSymbolResponse = {
+            symbol: fmpData.Symbol,
+            name: fmpData.companyName,
+            industry: fmpData.industry ? fmpData.industry : "",
+            sector: fmpData.sector ? fmpData.sector : "",
+          };
 
-      const exactEtfs: EtfSymbolResponse[] = this.genericFilter<EtfSymbol>(
-        query,
-        etfs,
-        (e) => e.symbol
-      ).map((e) => {
-        return {
-          symbol: e.symbol,
-          name: e.companyName,
-        };
-      });
+          return res;
+        });
+
+      const exactEtfs: EtfSymbolResponse[] =
+        this.genericFilter<FMPSymbolProfileData>(
+          query,
+          etfs,
+          (e) => e.Symbol
+        ).map((e) => {
+          return {
+            symbol: e.Symbol,
+            name: e.companyName,
+          };
+        });
 
       const returnResponse: SearchResponse = {
         stocks: exactStocks,
@@ -41,32 +57,64 @@ export class SearchService {
       return returnResponse;
     } else {
       const stockTickerResults: StockSymbolResponse[] =
-        this.genericFilter<StockSymbol>(query, stocks, (s) => s.symbol, true);
+        this.genericFilter<FMPSymbolProfileData>(
+          query,
+          stocks,
+          (s) => s.Symbol,
+          true
+        ).map((fmpData) => {
+          const res: StockSymbolResponse = {
+            symbol: fmpData.Symbol,
+            name: fmpData.companyName,
+            industry: fmpData.industry ? fmpData.industry : "",
+            sector: fmpData.sector ? fmpData.sector : "",
+          };
+
+          return res;
+        });
 
       const stockNameResults: StockSymbolResponse[] =
-        this.genericFilter<StockSymbol>(query, stocks, (s) => s.name, true);
+        this.genericFilter<FMPSymbolProfileData>(
+          query,
+          stocks,
+          (s) => s.companyName,
+          true
+        ).map((fmpData) => {
+          const res: StockSymbolResponse = {
+            symbol: fmpData.Symbol,
+            name: fmpData.companyName,
+            industry: fmpData.industry ? fmpData.industry : "",
+            sector: fmpData.sector ? fmpData.sector : "",
+          };
+
+          return res;
+        });
 
       const etfTickerResults: EtfSymbolResponse[] =
-        this.genericFilter<EtfSymbol>(query, etfs, (e) => e.symbol, true).map(
-          (e) => {
-            return {
-              symbol: e.symbol,
-              name: e.companyName,
-            };
-          }
-        );
+        this.genericFilter<FMPSymbolProfileData>(
+          query,
+          etfs,
+          (e) => e.Symbol,
+          true
+        ).map((e) => {
+          return {
+            symbol: e.Symbol,
+            name: e.companyName,
+          };
+        });
 
-      const etfNameResults: EtfSymbolResponse[] = this.genericFilter<EtfSymbol>(
-        query,
-        etfs,
-        (e) => e.companyName,
-        true
-      ).map((e) => {
-        return {
-          symbol: e.symbol,
-          name: e.companyName,
-        };
-      });
+      const etfNameResults: EtfSymbolResponse[] =
+        this.genericFilter<FMPSymbolProfileData>(
+          query,
+          etfs,
+          (e) => e.companyName,
+          true
+        ).map((e) => {
+          return {
+            symbol: e.Symbol,
+            name: e.companyName,
+          };
+        });
 
       const mergedStocks = this.mergeArrays<StockSymbolResponse, string>(
         (s: StockSymbolResponse) => s.symbol,
@@ -95,16 +143,25 @@ export class SearchService {
     getValue: (item: T) => string,
     includeContainsResults: boolean = false
   ): T[] {
-    const exactMatches: T[] = data.filter(
-      (item) => getValue(item).toLowerCase() === query.toLocaleLowerCase()
-    );
+    const exactMatches: T[] = data.filter((item) => {
+      const value = getValue(item);
+      if (isString(value)) {
+        return value.toLowerCase() === query.toLowerCase();
+      } else {
+        return false;
+      }
+    });
     var containsMatches: T[] = [];
 
     if (includeContainsResults) {
-      containsMatches = data.filter(
-        (item) =>
-          getValue(item)?.toLowerCase().includes(query.toLowerCase()) || false
-      );
+      containsMatches = data.filter((item) => {
+        const value = getValue(item);
+        if (isString(value)) {
+          return value.toLowerCase().includes(query.toLowerCase()) || false;
+        } else {
+          return false;
+        }
+      });
     }
     return this.mergeArrays<T, string>(getValue, exactMatches, containsMatches);
   }

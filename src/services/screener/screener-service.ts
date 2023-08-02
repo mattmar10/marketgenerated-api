@@ -19,6 +19,8 @@ import {
   sma,
   smaSeq,
 } from "../../indicators/moving-average";
+import { RelativeStrengthService } from "../relative-strength/relative-strength-service";
+import { SymbolService } from "../symbol_service";
 
 export interface TrendTemplateError {
   symbol: Ticker;
@@ -39,12 +41,13 @@ function passesTrendTemplateCriteria(ttr: TrendTemplateResult): boolean {
   const highThreshold = ttr.fiftyTwoWeekHigh - 0.25 * ttr.fiftyTwoWeekHigh;
 
   return (
-    ttr.lastClose > ttr.fiftyMA &&
+    //ttr.lastClose > ttr.fiftyMA &&
     ttr.fiftyMA > ttr.oneFiftyMA &&
     ttr.oneFiftyMA > ttr.twoHundredMA &&
     ttr.twoHudredMALRSlope > 0 &&
     ttr.lastClose > lowThreshold &&
-    ttr.lastClose > highThreshold
+    ttr.lastClose > highThreshold &&
+    ttr.compositeRelativeStrength > 50
   );
 }
 
@@ -55,7 +58,10 @@ export class ScreenerService {
   private MIN_CLOSE_PRICE: number = 10.0;
 
   constructor(
-    @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService
+    @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService,
+    @inject(TYPES.SymbolService) private symbolSvc: SymbolService,
+    @inject(TYPES.RelativeStrengthService)
+    private relativeStrengthSvc: RelativeStrengthService
   ) {
     this.trendTemplateResults = this.buildTrendTemplateResults();
   }
@@ -66,7 +72,15 @@ export class ScreenerService {
 
   private buildTrendTemplateResults(): TrendTemplateResults {
     const cached = this.cacheSvc.getAllData();
-    const allKeys = cached.keys();
+    const etfs = this.symbolSvc.getEtfs();
+    const stocks = this.symbolSvc.getStocks();
+
+    const universeOfStockKeys = stocks.map((s) => s.Symbol);
+    const universeOfEtfKeys = etfs.map((e) => e.Symbol);
+
+    const allKeys = Array.from(cached.keys()).filter(
+      (k) => universeOfStockKeys.includes(k) || universeOfEtfKeys.includes(k)
+    );
 
     const trendTemplateSuccesses: TrendTemplateResult[] = [];
     const trendTemplateErrors: TrendTemplateError[] = [];
@@ -87,8 +101,13 @@ export class ScreenerService {
         trendTemplateSuccesses.push(trendTemplateResult);
       }
     }
+
+    const sorted = [...trendTemplateSuccesses].sort(
+      (a, b) => b.compositeRelativeStrength - a.compositeRelativeStrength
+    );
+
     const trendTemplateResults: TrendTemplateResults = {
-      results: trendTemplateSuccesses,
+      results: sorted,
     };
 
     return trendTemplateResults;
@@ -127,8 +146,8 @@ export class ScreenerService {
       return err;
     }
 
-    const lastThirty = twoHundredSMASeq.slice(-30);
-    const linearReg = calculateLinearRegressionFromNumbers(lastThirty, 30);
+    const lastNinety = twoHundredSMASeq.slice(-90);
+    const linearReg = calculateLinearRegressionFromNumbers(lastNinety, 90);
 
     if (!isLinearRegressionResult(linearReg)) {
       const err: TrendTemplateError = {
@@ -155,15 +174,24 @@ export class ScreenerService {
       return err;
     }
 
+    const relativeStrengthRes =
+      this.relativeStrengthSvc.getCompositeRelativeStrengthForSymbol(ticker);
+
+    const lastClose = Number(closes[closes.length - 1].toFixed(2));
+
+    const percentageAwayFromFiftyMA = ((lastClose - fiftySMA) / fiftySMA) * 100;
+
     const result: TrendTemplateResult = {
       symbol: ticker,
-      lastClose: closes[closes.length - 1],
-      twoHundredMA: twoHundredSMA,
-      oneFiftyMA: oneFiftySMA,
-      fiftyMA: fiftySMA,
-      twoHudredMALRSlope: linearReg.slope,
-      fiftyTwoWeekHigh: fiftyTwoWeekHigh,
-      fiftyTwoWeekLow: fiftyTwoWeekLow,
+      lastClose: Number(lastClose.toFixed(2)),
+      twoHundredMA: Number(twoHundredSMA.toFixed(2)),
+      oneFiftyMA: Number(oneFiftySMA.toFixed(2)),
+      fiftyMA: Number(fiftySMA.toFixed(2)),
+      twoHudredMALRSlope: Number(linearReg.slope.toFixed(2)),
+      fiftyTwoWeekHigh: Number(fiftyTwoWeekHigh.toFixed(2)),
+      fiftyTwoWeekLow: Number(fiftyTwoWeekLow.toFixed(2)),
+      compositeRelativeStrength: Number(relativeStrengthRes.toFixed(2)),
+      percentFrom50MA: Number(percentageAwayFromFiftyMA.toFixed(2)),
     };
 
     return result;
