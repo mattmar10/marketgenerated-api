@@ -18,6 +18,6 @@ export class ScreenerController {
   @httpGet("/trend-filter")
   public getTrendFilter(@request() req: Request, @response() res: Response) {
     const trendFilterResults = this.screenerSvc.getTrendTemplateResults();
-    res.json(trendFilterResults);
+    return trendFilterResults;
   }
 }

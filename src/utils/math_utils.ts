@@ -22,6 +22,17 @@ export function calculateMedian(numbers: number[]): number | null {
   }
 }
 
+export function calculateMean(numbers: number[]): number | null {
+  if (numbers.length === 0) {
+    throw new Error("Array must not be empty");
+  }
+
+  const sum = numbers.reduce((acc, curr) => acc + curr, 0);
+  const mean = sum / numbers.length;
+
+  return mean;
+}
+
 export function calculatePopulationStandardDeviation(
   numbers: number[]
 ): number | MathError {

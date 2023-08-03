@@ -130,6 +130,12 @@ export class DailyCacheService {
     } else return [];
   }
 
+  public getLastDate(): string | undefined {
+    const spyCandles = this.getCandles("SPY");
+
+    return spyCandles ? spyCandles[spyCandles.length - 1].dateStr : undefined;
+  }
+
   public getCandlesWithFilter(
     symbol: Ticker,
     filter: (candle: Candle) => boolean

@@ -9,7 +9,7 @@ import { httpGet } from "inversify-express-utils";
 import { Ticker } from "../../MarketGeneratedTypes";
 import { Candle } from "../../modles/candle";
 import { filterCandlesPast52Weeks } from "../../indicators/indicator-utils";
-import { sortCandlesByDate } from "../../utils/basic_utils";
+import { isString, sortCandlesByDate } from "../../utils/basic_utils";
 import {
   calculateLinearRegressionFromNumbers,
   isLinearRegressionResult,
@@ -21,6 +21,7 @@ import {
 } from "../../indicators/moving-average";
 import { RelativeStrengthService } from "../relative-strength/relative-strength-service";
 import { SymbolService } from "../symbol_service";
+import { calculateMean } from "../../utils/math_utils";
 
 export interface TrendTemplateError {
   symbol: Ticker;
@@ -71,43 +72,59 @@ export class ScreenerService {
   }
 
   private buildTrendTemplateResults(): TrendTemplateResults {
-    const cached = this.cacheSvc.getAllData();
     const etfs = this.symbolSvc.getEtfs();
     const stocks = this.symbolSvc.getStocks();
 
-    const universeOfStockKeys = stocks.map((s) => s.Symbol);
-    const universeOfEtfKeys = etfs.map((e) => e.Symbol);
-
-    const allKeys = Array.from(cached.keys()).filter(
-      (k) => universeOfStockKeys.includes(k) || universeOfEtfKeys.includes(k)
-    );
-
-    const trendTemplateSuccesses: TrendTemplateResult[] = [];
     const trendTemplateErrors: TrendTemplateError[] = [];
+    const stockResults: TrendTemplateResult[] = [];
+    const etfResults: TrendTemplateResult[] = [];
 
-    for (const k of allKeys) {
-      const candles = this.cacheSvc.getCandles(k);
+    // Combine the loops for stocks and ETFs
+    for (const symbolData of [...stocks, ...etfs]) {
+      const symbol = symbolData.Symbol;
+      const candles = this.cacheSvc.getCandles(symbol);
+
+      if (!candles || candles.length === 0) {
+        continue;
+      }
+
       const sorted = sortCandlesByDate(candles);
 
       if (sorted[sorted.length - 1].close < this.MIN_CLOSE_PRICE) {
         continue;
       }
 
-      const trendTemplateResult = this.buildTrendTemplateResult(k, sorted);
+      const companyName = symbolData.companyName;
+      const trendTemplateResult = this.buildTrendTemplateResult(
+        symbol,
+        companyName,
+        sorted
+      );
 
       if (isTrendTemplateError(trendTemplateResult)) {
         trendTemplateErrors.push(trendTemplateResult);
       } else if (passesTrendTemplateCriteria(trendTemplateResult)) {
-        trendTemplateSuccesses.push(trendTemplateResult);
+        if (symbolData.isEtf) {
+          etfResults.push(trendTemplateResult);
+        } else {
+          stockResults.push(trendTemplateResult);
+        }
       }
     }
 
-    const sorted = [...trendTemplateSuccesses].sort(
+    // Sort the results arrays in descending order based on compositeRelativeStrength
+    const sortedStocks = [...stockResults].sort(
+      (a, b) => b.compositeRelativeStrength - a.compositeRelativeStrength
+    );
+
+    const sortedEtfs = [...etfResults].sort(
       (a, b) => b.compositeRelativeStrength - a.compositeRelativeStrength
     );
 
     const trendTemplateResults: TrendTemplateResults = {
-      results: sorted,
+      lastDate: this.cacheSvc.getLastDate()!,
+      stocks: sortedStocks,
+      etfs: sortedEtfs,
     };
 
     return trendTemplateResults;
@@ -115,6 +132,7 @@ export class ScreenerService {
 
   private buildTrendTemplateResult(
     ticker: Ticker,
+    name: string,
     candles: Candle[]
   ): TrendTemplateError | TrendTemplateResult {
     const filtered = filterCandlesPast52Weeks(candles);
@@ -161,10 +179,32 @@ export class ScreenerService {
     const oneFiftySMA = sma(150, closes);
     const fiftySMA = sma(50, closes);
 
+    const volumes = filtered.map((c) => c.volume);
+    const ranges = filtered.map((c) => c.high - c.low);
+
+    const lastTwentyVolumes = volumes.slice(-20);
+    const lastTwentyRanges = ranges.slice(-20);
+
+    const avgVolume = calculateMean(lastTwentyVolumes);
+    const avgRange = calculateMean(lastTwentyRanges);
+    const linearRegressionVolume = calculateLinearRegressionFromNumbers(
+      lastTwentyVolumes,
+      20
+    );
+    const linearRegressionVolatility = calculateLinearRegressionFromNumbers(
+      lastTwentyRanges,
+      20
+    );
+
+    const lastVolume = volumes[volumes.length - 1];
+    const lastRange = ranges[ranges.length - 1];
+
     if (
       isMovingAverageError(twoHundredSMA) ||
       isMovingAverageError(oneFiftySMA) ||
-      isMovingAverageError(fiftySMA)
+      isMovingAverageError(fiftySMA) ||
+      isString(linearRegressionVolatility) ||
+      isString(linearRegressionVolume)
     ) {
       const err: TrendTemplateError = {
         symbol: ticker,
@@ -183,7 +223,9 @@ export class ScreenerService {
 
     const result: TrendTemplateResult = {
       symbol: ticker,
+      name: name,
       lastClose: Number(lastClose.toFixed(2)),
+      lastVolume: lastVolume,
       twoHundredMA: Number(twoHundredSMA.toFixed(2)),
       oneFiftyMA: Number(oneFiftySMA.toFixed(2)),
       fiftyMA: Number(fiftySMA.toFixed(2)),
@@ -192,6 +234,15 @@ export class ScreenerService {
       fiftyTwoWeekLow: Number(fiftyTwoWeekLow.toFixed(2)),
       compositeRelativeStrength: Number(relativeStrengthRes.toFixed(2)),
       percentFrom50MA: Number(percentageAwayFromFiftyMA.toFixed(2)),
+      lastTwentyAvgVolume: Number(avgVolume?.toFixed(2)),
+      lastDailyRange: Number(lastRange.toFixed(2)),
+      lastTwentyVolumeLinearRegressionSlope: Number(
+        linearRegressionVolume.slope.toFixed(2)
+      ),
+      lastTwentyAvgDailyRange: Number(avgRange?.toFixed(2)),
+      lastTwentDailyRangeLinearRegressionSlope: Number(
+        linearRegressionVolatility.slope.toFixed(2)
+      ),
     };
 
     return result;
