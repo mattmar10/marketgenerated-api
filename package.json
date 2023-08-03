@@ -4,7 +4,7 @@
   "description": "api for serving market generated app",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsoa spec-and-routes && tsc",
     "test": "mocha --require ts-node/register test/**/*.test.ts",
     "dev": "ts-node-dev src/app.ts"
   },

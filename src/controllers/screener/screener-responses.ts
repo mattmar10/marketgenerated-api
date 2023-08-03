@@ -2,7 +2,10 @@ import { Ticker } from "../../MarketGeneratedTypes";
 
 export interface TrendTemplateResult {
   symbol: Ticker;
+  name: string;
   lastClose: number;
+  lastVolume: number;
+  lastDailyRange: number;
   twoHundredMA: number;
   oneFiftyMA: number;
   fiftyMA: number;
@@ -11,8 +14,14 @@ export interface TrendTemplateResult {
   fiftyTwoWeekLow: number;
   compositeRelativeStrength: number;
   percentFrom50MA: number;
+  lastTwentyAvgVolume: number;
+  lastTwentyVolumeLinearRegressionSlope: number;
+  lastTwentyAvgDailyRange: number;
+  lastTwentDailyRangeLinearRegressionSlope: number;
 }
 
 export interface TrendTemplateResults {
-  results: TrendTemplateResult[];
+  lastDate: string;
+  stocks: TrendTemplateResult[];
+  etfs: TrendTemplateResult[];
 }
