@@ -20,7 +20,7 @@ import {
   smaSeq,
 } from "../../indicators/moving-average";
 import { RelativeStrengthService } from "../relative-strength/relative-strength-service";
-import { SymbolService } from "../symbol_service";
+import { SymbolService } from "../symbol/symbol_service";
 import { calculateMean } from "../../utils/math_utils";
 
 export interface TrendTemplateError {

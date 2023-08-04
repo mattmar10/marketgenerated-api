@@ -1,6 +1,10 @@
 import { inject, injectable } from "inversify";
 import TYPES from "../../types";
-import { EtfHoldingInfo, StockSymbol, SymbolService } from "../symbol_service";
+import {
+  EtfHoldingInfo,
+  StockSymbol,
+  SymbolService,
+} from "../symbol/symbol_service";
 import { DailyCacheService } from "../daily_cache_service";
 import { Candle } from "../../modles/candle";
 import {
@@ -322,7 +326,7 @@ export class OverviewService {
 
         const returnsOverview: IndexDailyOverviewPriceReturns = {
           returns: [dowOverview, sandPOverview, nasOverview],
-          lastCloseDate: dowOverview.lastCandle.date,
+          lastCloseDate: dowOverview.lastCandle.dateStr as string,
         };
 
         return returnsOverview;
@@ -402,77 +406,52 @@ export class OverviewService {
     );
 
     const stocks = this.symbolSvc.getStocks();
-    const stockKeys = stocks.map((s) => s.Symbol);
-
     const sectorMap: Map<string, StockSymbolWithReturn[]> = new Map();
 
-    for (const k of stockKeys) {
-      const candles = this.cacheSvc.getCandles(k);
+    for (const stock of stocks) {
+      const candles = this.cacheSvc.getCandles(stock.Symbol);
 
       if (
         candles &&
         candles.length > 1 &&
-        candles[candles.length - 1].date == lastCloseDate
+        candles[candles.length - 1].date == lastCloseDate &&
+        stock.sector
       ) {
-        const found = stocks.find((s) => s.Symbol === k);
-        if (!found) {
-          continue;
-        }
-
-        const foundSector = found.sector ? found.sector : "NA";
         const returns = this.calculateDailyReturns(candles);
-
-        if (!returns) {
-          continue;
-        }
-
-        const inMap = sectorMap.get(foundSector);
-
-        const stockWithReturn: StockSymbolWithReturn = {
-          symbol: found.Symbol,
-          name: found.companyName,
-          sector: found.sector!,
-          industry: found.industry ? found.industry : "",
-          dayReturn: returns,
-        };
-        if (inMap) {
-          inMap.push(stockWithReturn);
-        } else {
-          sectorMap.set(foundSector, [stockWithReturn]);
+        if (returns) {
+          const stockWithReturn: StockSymbolWithReturn = {
+            symbol: stock.Symbol,
+            name: stock.companyName,
+            sector: stock.sector,
+            industry: stock.industry || "",
+            dayReturn: returns,
+          };
+          const sectorStocks = sectorMap.get(stock.sector) || [];
+          sectorStocks.push(stockWithReturn);
+          sectorMap.set(stock.sector, sectorStocks);
         }
       }
     }
 
-    const sectors = Array.from(sectorMap.keys());
+    const mapped: DailySectorOverview[] = [];
 
-    const mapped: DailySectorOverview[] = sectors.flatMap((s) => {
-      const symbolsWithReturns = sectorMap.get(s);
-      if (!symbolsWithReturns) {
-        return [];
-      }
-
+    for (const [sector, symbolsWithReturns] of sectorMap.entries()) {
       const allReturns = symbolsWithReturns.map((swr) => swr.dayReturn);
       const returnsSum = allReturns.reduce((acc, val) => acc + val, 0);
       const meanReturn = returnsSum / allReturns.length;
       const medianReturn = calculateMedian(allReturns);
 
-      if (!medianReturn) {
-        return [];
+      if (medianReturn !== null) {
+        const overview: DailySectorOverview = {
+          sector,
+          meanDayReturn: Number(meanReturn.toFixed(4)),
+          medianDayReturn: Number(medianReturn.toFixed(4)),
+          allReturns: allReturns.map((r) => Number(r.toFixed(4))),
+        };
+        mapped.push(overview);
       }
+    }
 
-      const overview: DailySectorOverview = {
-        sector: s,
-        meanDayReturn: Number(meanReturn.toFixed(4)),
-        medianDayReturn: Number(medianReturn.toFixed(4)),
-        allReturns: allReturns.map((r) => Number(r.toFixed(4))),
-      };
-
-      return [overview]; // Return an array with the overview object inside
-    });
-
-    const dailySectorsOverview: DailySectorsOverview = {
-      sectors: mapped,
-    };
-    return dailySectorsOverview;
+    return { sectors: mapped };
   }
 }

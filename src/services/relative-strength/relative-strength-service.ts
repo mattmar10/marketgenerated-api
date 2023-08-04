@@ -2,7 +2,7 @@ import { inject, injectable } from "inversify";
 import { DailyCacheService } from "../daily_cache_service";
 import TYPES from "../../types";
 import { Ticker } from "../../MarketGeneratedTypes";
-import { SymbolService } from "../symbol_service";
+import { SymbolService } from "../symbol/symbol_service";
 import {
   calculatePercentageReturn,
   filterCandlesPast52Weeks,

@@ -1,6 +1,10 @@
 import { inject, injectable } from "inversify";
 
-import { EtfSymbol, StockSymbol, SymbolService } from "../symbol_service";
+import {
+  EtfSymbol,
+  StockSymbol,
+  SymbolService,
+} from "../symbol/symbol_service";
 import TYPES from "../../types";
 import {
   EtfSymbolResponse,
