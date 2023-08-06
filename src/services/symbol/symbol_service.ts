@@ -4,10 +4,13 @@ import { Readable } from "stream";
 import axios from "axios";
 import * as z from "zod";
 import {
+  FMPProfile,
   FMPSymbolProfileData,
-  FMPTradableSymbolArray,
-} from "./financial_modeling_prep_types";
+  FMPProfileArraySchema,
+} from "../financial_modeling_prep_types";
 import { parse } from "dotenv";
+import { Either, Left, Right, Ticker } from "../../MarketGeneratedTypes";
+export type SymbolServiceError = string;
 
 const FMP_BASE_URL = "https://financialmodelingprep.com/api";
 
@@ -77,6 +80,10 @@ export class SymbolService {
     "https://marketgenerated.s3.amazonaws.com/etf-holdings/SPY.csv";
   private qqqURL =
     "https://marketgenerated.s3.amazonaws.com/etf-holdings/QQQ.csv";
+
+  private FINANCIAL_MODELING_PREP_URL =
+    "https://financialmodelingprep.com/api/v3";
+  private financialModelingPrepKey = process.env.FINANCIAL_MODELING_PREP_KEY;
 
   constructor() {
     this.stocks = [];
@@ -213,6 +220,33 @@ export class SymbolService {
       // Handle errors
       console.error("Error fetching or parsing CSV:", error);
       throw error;
+    }
+  }
+
+  public async getProfileForSymbol(
+    symbol: Ticker
+  ): Promise<Either<SymbolServiceError, FMPProfile>> {
+    try {
+      console.log(`fetching profile for ${symbol}`);
+      const url = `${this.FINANCIAL_MODELING_PREP_URL}/profile/${symbol}?apikey=${this.financialModelingPrepKey}`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FMPProfileArraySchema.safeParse(data);
+
+      if (parsed.success) {
+        return Right<FMPProfile>(parsed.data[0] as FMPProfile);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing profile data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(`Unable to get profile for symbol ${symbol}`)
+      );
     }
   }
 }

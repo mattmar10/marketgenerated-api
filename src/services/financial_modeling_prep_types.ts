@@ -93,3 +93,45 @@ export interface FMPSymbolProfileData {
   isFund: boolean;
   isAdr: boolean;
 }
+
+export const FmpProfileSchema = z.object({
+  symbol: z.string(),
+  price: z.number(),
+  beta: z.number(),
+  volAvg: z.number(),
+  mktCap: z.number(),
+  lastDiv: z.number(),
+  range: z.string(),
+  changes: z.number(),
+  companyName: z.string(),
+  currency: z.string(),
+  cik: z.string(),
+  isin: z.string(),
+  cusip: z.string(),
+  exchange: z.string(),
+  exchangeShortName: z.string(),
+  industry: z.string(),
+  website: z.string(),
+  description: z.string(),
+  ceo: z.string(),
+  sector: z.string(),
+  country: z.string(),
+  fullTimeEmployees: z.string(),
+  phone: z.string(),
+  address: z.string(),
+  city: z.string(),
+  state: z.string(),
+  zip: z.string(),
+  dcfDiff: z.number(),
+  dcf: z.number(),
+  image: z.string(),
+  ipoDate: z.string(),
+  defaultImage: z.boolean(),
+  isEtf: z.boolean(),
+  isActivelyTrading: z.boolean(),
+  isAdr: z.boolean(),
+  isFund: z.boolean(),
+});
+export type FMPProfile = z.infer<typeof FmpProfileSchema>;
+export const FMPProfileArraySchema = FmpProfileSchema.array();
+export type FMPProfileList = z.infer<typeof FMPProfileArraySchema>;

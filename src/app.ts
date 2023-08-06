@@ -6,12 +6,13 @@ import { InversifyExpressServer } from "inversify-express-utils";
 import { S3Client } from "@aws-sdk/client-s3";
 import TYPES from "./types";
 import { DailyCacheService } from "./services/daily_cache_service";
-import { SymbolService } from "./services/symbol_service";
+import { SymbolService } from "./services/symbol/symbol_service";
 import { OverviewService } from "./services/overview/overview-service";
 
 import "./controllers/daily/daily-controller";
 import "./controllers/overview/overview-controller";
 import "./controllers/health-controller";
+import "./controllers/symbol/symbol-controller";
 import "./controllers/relative-strength/relative-strength-controller";
 import "./controllers/search/search-controller";
 import "./controllers/screener/screener-controller";

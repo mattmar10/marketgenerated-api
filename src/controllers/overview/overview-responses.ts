@@ -26,7 +26,7 @@ export interface IndexDailyOverview {
 
 export interface IndexDailyOverviewPriceReturns {
   returns: IndexDailyOverview[];
-  lastCloseDate: number;
+  lastCloseDate: string;
 }
 
 export interface ETFOverviewPriceReturns {
