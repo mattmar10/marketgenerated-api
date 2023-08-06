@@ -7,9 +7,12 @@ import {
   FMPProfile,
   FMPSymbolProfileData,
   FMPProfileArraySchema,
+  CandleListSchema,
+  CandlesList,
 } from "../financial_modeling_prep_types";
 import { parse } from "dotenv";
 import { Either, Left, Right, Ticker } from "../../MarketGeneratedTypes";
+import { Quote, QuoteArraySchema, QuoteElementSchema } from "./symbol-types";
 export type SymbolServiceError = string;
 
 const FMP_BASE_URL = "https://financialmodelingprep.com/api";
@@ -220,6 +223,95 @@ export class SymbolService {
       // Handle errors
       console.error("Error fetching or parsing CSV:", error);
       throw error;
+    }
+  }
+
+  public async getQuoteForSymbol(
+    symbol: Ticker
+  ): Promise<Either<SymbolServiceError, Quote>> {
+    console.log(`fetching quote for ${symbol}`);
+    const url = `${this.FINANCIAL_MODELING_PREP_URL}/quote/${symbol}?apikey=${this.financialModelingPrepKey}`;
+
+    try {
+      const response = await axios.get(url);
+      const parsed = QuoteArraySchema.safeParse(response.data);
+
+      if (parsed.success) {
+        return Right<Quote>(parsed.data[0]);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing profile data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(`Unable to get quote for symbol ${symbol}`)
+      );
+    }
+  }
+
+  public async getWeeklyCandlesForSymbol(
+    symbol: Ticker,
+    startDate: string | undefined,
+    endDate: string | undefined
+  ): Promise<Either<SymbolServiceError, CandlesList>> {
+    console.log(`fetching weekly candles for ${symbol}`);
+    let url = `${this.FINANCIAL_MODELING_PREP_URL}/historical-chart/1week/${symbol}?apikey=${this.financialModelingPrepKey}`;
+
+    if (startDate && endDate) {
+      url += `&from=${startDate}&to=${endDate}`;
+    } else if (startDate) {
+      url += `&from=${startDate}`;
+    } else if (endDate) {
+      url += `&to=${endDate}`;
+    }
+
+    try {
+      const response = await axios.get(url);
+      const parsed = CandleListSchema.safeParse(response.data);
+
+      if (parsed.success) {
+        return Right<CandlesList>(parsed.data);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing weekly candles data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get weekly candles for symbol ${symbol}`
+        )
+      );
+    }
+  }
+
+  public async getDailyCandlesForSymbol(
+    symbol: Ticker
+  ): Promise<Either<SymbolServiceError, CandlesList>> {
+    console.log(`fetching daily candles for ${symbol}`);
+    const url = `${this.FINANCIAL_MODELING_PREP_URL}/historical-chart/1day/${symbol}?apikey=${this.financialModelingPrepKey}`;
+
+    try {
+      const response = await axios.get(url);
+      const parsed = CandleListSchema.safeParse(response.data);
+
+      if (parsed.success) {
+        return Right<CandlesList>(parsed.data);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing daily candles data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get daily candles for symbol ${symbol}`
+        )
+      );
     }
   }
 
