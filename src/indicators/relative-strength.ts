@@ -14,7 +14,7 @@ export function getRelativeStrengthLine(
 
       if (symbolCandle) {
         return {
-          date: s.date,
+          date: s.dateStr,
           value: symbolCandle.close / s.close,
         };
       } else {

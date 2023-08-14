@@ -18,6 +18,7 @@ export interface TrendTemplateResult {
   lastTwentyVolumeLinearRegressionSlope: number;
   lastTwentyAvgDailyRange: number;
   lastTwentDailyRangeLinearRegressionSlope: number;
+  relativeStrengthPercentOfFiftyTwoWeekRange: number;
 }
 
 export interface TrendTemplateResults {
