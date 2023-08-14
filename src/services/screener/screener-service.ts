@@ -226,6 +226,15 @@ export class ScreenerService {
     const filteredBenchmarkCandles = filterCandlesPast52Weeks(benchMarkCandles);
     const rsLine = getRelativeStrengthLine(filteredBenchmarkCandles, filtered);
 
+    if (!rsLine) {
+      const err: TrendTemplateError = {
+        symbol: ticker,
+        error: "error calculating rs line",
+      };
+
+      return err;
+    }
+
     const values = rsLine.data.map((p) => p.value);
     const maxVal = Math.max(...values);
     const minVal = Math.min(...values);
