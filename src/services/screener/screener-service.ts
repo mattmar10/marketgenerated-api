@@ -22,6 +22,7 @@ import {
 import { RelativeStrengthService } from "../relative-strength/relative-strength-service";
 import { SymbolService } from "../symbol/symbol_service";
 import { calculateMean } from "../../utils/math_utils";
+import { getRelativeStrengthLine } from "../../indicators/relative-strength";
 
 export interface TrendTemplateError {
   symbol: Ticker;
@@ -221,6 +222,18 @@ export class ScreenerService {
 
     const percentageAwayFromFiftyMA = ((lastClose - fiftySMA) / fiftySMA) * 100;
 
+    const benchMarkCandles = this.cacheSvc.getCandles("SPY");
+    const filteredBenchmarkCandles = filterCandlesPast52Weeks(benchMarkCandles);
+    const rsLine = getRelativeStrengthLine(filteredBenchmarkCandles, filtered);
+
+    const values = rsLine.data.map((p) => p.value);
+    const maxVal = Math.max(...values);
+    const minVal = Math.min(...values);
+    const lastValue = values[values.length - 1];
+
+    const fiftyTwoWeekRSLinePercent =
+      ((lastValue - minVal) / (maxVal - minVal)) * 100;
+
     const result: TrendTemplateResult = {
       symbol: ticker,
       name: name,
@@ -243,6 +256,7 @@ export class ScreenerService {
       lastTwentDailyRangeLinearRegressionSlope: Number(
         linearRegressionVolatility.slope.toFixed(2)
       ),
+      relativeStrengthPercentOfFiftyTwoWeekRange: fiftyTwoWeekRSLinePercent,
     };
 
     return result;

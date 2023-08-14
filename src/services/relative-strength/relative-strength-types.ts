@@ -49,7 +49,7 @@ export interface RelativeStrengthsForSymbol {
 }
 
 export interface RelativeStrengthLinePoint {
-  date: number;
+  date: string;
   value: number;
 }
 export interface RelativeStrengthLine {
