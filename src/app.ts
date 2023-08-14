@@ -16,10 +16,12 @@ import "./controllers/symbol/symbol-controller";
 import "./controllers/relative-strength/relative-strength-controller";
 import "./controllers/search/search-controller";
 import "./controllers/screener/screener-controller";
+import "./controllers/weekly/weekly-controller";
 import { SearchService } from "./services/search/search_service";
 import { ScreenerService } from "./services/screener/screener-service";
 import { RelativeStrengthService } from "./services/relative-strength/relative-strength-service";
 import { StockIndexService } from "./services/stock-index/stock-index-service";
+import { LevelsService } from "./services/levels/levels-service";
 
 // Load environment variables from .env file
 (async () => {
@@ -92,6 +94,11 @@ import { StockIndexService } from "./services/stock-index/stock-index-service";
     await dailyCacheService.initializeCache();
   }
   console.timeEnd("Daily Cache Service Initialization");
+
+  container
+    .bind<LevelsService>(TYPES.LevelsService)
+    .to(LevelsService)
+    .inSingletonScope();
 
   container
     .bind<OverviewService>(TYPES.OverviewService)

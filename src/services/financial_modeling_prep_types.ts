@@ -105,7 +105,7 @@ export const FmpProfileSchema = z.object({
   changes: z.number(),
   companyName: z.string(),
   currency: z.string(),
-  cik: z.string(),
+  cik: z.string().nullable(),
   isin: z.string(),
   cusip: z.string(),
   exchange: z.string(),
@@ -116,17 +116,17 @@ export const FmpProfileSchema = z.object({
   ceo: z.string(),
   sector: z.string(),
   country: z.string(),
-  fullTimeEmployees: z.string(),
-  phone: z.string(),
-  address: z.string(),
-  city: z.string(),
-  state: z.string(),
-  zip: z.string(),
-  dcfDiff: z.number(),
-  dcf: z.number(),
-  image: z.string(),
-  ipoDate: z.string(),
-  defaultImage: z.boolean(),
+  fullTimeEmployees: z.string().nullable(),
+  phone: z.string().nullable(),
+  address: z.string().nullable(),
+  city: z.string().nullable(),
+  state: z.string().nullable(),
+  zip: z.string().nullable(),
+  dcfDiff: z.number().nullable(),
+  dcf: z.number().nullable(),
+  image: z.string().nullable(),
+  ipoDate: z.string().nullable(),
+  defaultImage: z.boolean().nullable(),
   isEtf: z.boolean(),
   isActivelyTrading: z.boolean(),
   isAdr: z.boolean(),
@@ -135,3 +135,15 @@ export const FmpProfileSchema = z.object({
 export type FMPProfile = z.infer<typeof FmpProfileSchema>;
 export const FMPProfileArraySchema = FmpProfileSchema.array();
 export type FMPProfileList = z.infer<typeof FMPProfileArraySchema>;
+
+export const CandleSchema = z.object({
+  date: z.string(),
+  open: z.number(),
+  low: z.number(),
+  high: z.number(),
+  close: z.number(),
+  volume: z.number(),
+});
+export const CandleListSchema = CandleSchema.array();
+export type FMPCandle = z.infer<typeof CandleSchema>;
+export type CandlesList = z.infer<typeof CandleListSchema>;

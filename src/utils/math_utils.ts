@@ -1,5 +1,9 @@
 export type MathError = string;
 
+export function isMathError(error: any): error is MathError {
+  return typeof error === "string";
+}
+
 export function calculateMedian(numbers: number[]): number | null {
   // Step 1: Sort the array in ascending order
   const sortedNumbers = numbers.slice().sort((a, b) => a - b);
@@ -22,14 +26,13 @@ export function calculateMedian(numbers: number[]): number | null {
   }
 }
 
-export function calculateMean(numbers: number[]): number | null {
+export function calculateMean(numbers: number[]): number | undefined {
   if (numbers.length === 0) {
-    throw new Error("Array must not be empty");
+    return undefined;
   }
 
-  const sum = numbers.reduce((acc, curr) => acc + curr, 0);
+  const sum = numbers.reduce((acc, num) => acc + num, 0);
   const mean = sum / numbers.length;
-
   return mean;
 }
 
