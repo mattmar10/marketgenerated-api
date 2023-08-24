@@ -53,8 +53,24 @@ export class RelativeStrengthController {
     @next() next: NextFunction,
     @queryParam("count") count: number
   ) {
+    console.log("getting relative strength composite score leaders");
     const result =
       this.relativeStrengthSvc.getTopCompositeRelativeStrengthPerformers(count);
+
+    res.json(result);
+  }
+
+  @httpGet("/leaders/strength")
+  public getRSLineLeaders(
+    @request() req: Request,
+    @response() res: Response,
+    @next() next: NextFunction,
+    @queryParam("count") count: number
+  ) {
+    console.log("getting relative strength line leaders");
+
+    const result =
+      this.relativeStrengthSvc.getRelativeStrengthLineLeaders(count);
 
     res.json(result);
   }
@@ -78,7 +94,7 @@ export class RelativeStrengthController {
     if (isRelativeStrengthsForSymbol(result)) {
       res.json(result);
     } else {
-      console.log(`Error getting relative strength for ${symbol}`);
+      console.log(`Error getting relative strength for ${ticker}`);
       res.status(400).send();
     }
   }

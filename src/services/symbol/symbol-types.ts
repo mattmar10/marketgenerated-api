@@ -39,3 +39,66 @@ export interface SymbolProfile {
   website?: string;
   description?: string;
 }
+
+export const FmpNewsSchema = z.object({
+  symbol: z.string(),
+  publishedDate: z.coerce.date(),
+  title: z.string(),
+  image: z.string(),
+  site: z.string(),
+  text: z.string(),
+  url: z.string(),
+});
+export const FmpNewsListSchema = FmpNewsSchema.array();
+export type FmpNewsList = z.infer<typeof FmpNewsListSchema>;
+export type FmpNews = z.infer<typeof FmpNewsSchema>;
+
+export const FmpIncomeStatementElementSchema = z.object({
+  date: z.string(),
+  symbol: z.string(),
+  reportedCurrency: z.string(),
+  cik: z.string(),
+  fillingDate: z.string(),
+  acceptedDate: z.coerce.date(),
+  calendarYear: z.string(),
+  period: z.string(),
+  revenue: z.number(),
+  costOfRevenue: z.number(),
+  grossProfit: z.number(),
+  grossProfitRatio: z.number(),
+  researchAndDevelopmentExpenses: z.number().nullable(),
+  generalAndAdministrativeExpenses: z.number().nullable(),
+  sellingAndMarketingExpenses: z.number().nullable(),
+  sellingGeneralAndAdministrativeExpenses: z.number().nullable(),
+  otherExpenses: z.number().nullable(),
+  operatingExpenses: z.number().nullable(),
+  costAndExpenses: z.number().nullable(),
+  interestIncome: z.number().nullable(),
+  interestExpense: z.number().nullable(),
+  depreciationAndAmortization: z.number().nullable(),
+  ebitda: z.number().nullable(),
+  ebitdaratio: z.number().nullable(),
+  operatingIncome: z.number().nullable(),
+  operatingIncomeRatio: z.number().nullable(),
+  totalOtherIncomeExpensesNet: z.number().nullable(),
+  incomeBeforeTax: z.number(),
+  incomeBeforeTaxRatio: z.number(),
+  incomeTaxExpense: z.number(),
+  netIncome: z.number(),
+  netIncomeRatio: z.number(),
+  eps: z.number(),
+  epsdiluted: z.number(),
+  weightedAverageShsOut: z.number().nullable(),
+  weightedAverageShsOutDil: z.number().nullable(),
+  link: z.string().nullable(),
+  finalLink: z.string().nullable(),
+});
+
+export const FmpIncomeStatementListSchema =
+  FmpIncomeStatementElementSchema.array();
+export type FmpIncomeStatementList = z.infer<
+  typeof FmpIncomeStatementListSchema
+>;
+export type FmpIncomeStatementElement = z.infer<
+  typeof FmpIncomeStatementElementSchema
+>;

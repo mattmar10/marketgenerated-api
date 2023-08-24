@@ -104,7 +104,12 @@ export class OverviewService {
         const candles = this.cacheSvc.getCandles(k);
         const filtered = filterCandlesPast52Weeks(candles);
 
-        if (!filtered || filtered.length < 20 || !name) {
+        if (
+          !filtered ||
+          filtered.length < 20 ||
+          !name ||
+          filtered[filtered.length - 1].close < 5
+        ) {
           continue;
         }
         const mover: DailyMover = buildMoverRow(k, name, filtered);
@@ -114,7 +119,12 @@ export class OverviewService {
         const candles = this.cacheSvc.getCandles(k);
         const filtered = filterCandlesPast52Weeks(candles);
 
-        if (!filtered || filtered.length < 20 || !name) {
+        if (
+          !filtered ||
+          filtered.length < 20 ||
+          !name ||
+          filtered[filtered.length - 1].close < 5
+        ) {
           continue;
         }
         const mover: DailyMover = buildMoverRow(k, name, filtered);

@@ -12,9 +12,18 @@ import {
 } from "../financial_modeling_prep_types";
 import { parse } from "dotenv";
 import { Either, Left, Right, Ticker } from "../../MarketGeneratedTypes";
-import { Quote, QuoteArraySchema, QuoteElementSchema } from "./symbol-types";
+import {
+  FmpIncomeStatementElementSchema,
+  FmpIncomeStatementList,
+  FmpIncomeStatementListSchema,
+  FmpNewsList,
+  FmpNewsListSchema,
+  Quote,
+  QuoteArraySchema,
+  QuoteElementSchema,
+} from "./symbol-types";
 export type SymbolServiceError = string;
-
+export type PeriodType = "quarter" | "annual";
 const FMP_BASE_URL = "https://financialmodelingprep.com/api";
 
 const etfSymbolSchema = z.object({
@@ -338,6 +347,64 @@ export class SymbolService {
       console.error(error);
       return Promise.resolve(
         Left<SymbolServiceError>(`Unable to get profile for symbol ${symbol}`)
+      );
+    }
+  }
+
+  public async getNewsForSymbol(
+    symbol: Ticker
+  ): Promise<Either<SymbolServiceError, FmpNewsList>> {
+    try {
+      console.log(`fetching profile for ${symbol}`);
+      const url = `${this.FINANCIAL_MODELING_PREP_URL}/stock_news?tickers=${symbol}&limit=50&apikey=${this.financialModelingPrepKey}`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FmpNewsListSchema.safeParse(data);
+
+      if (parsed.success) {
+        return Right<FmpNewsList>(parsed.data);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing news data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(`Unable to get profile for symbol ${symbol}`)
+      );
+    }
+  }
+
+  public async getIncomeStatementForSymbol(
+    symbol: Ticker,
+    period: PeriodType = "quarter",
+    limit: number = 4
+  ): Promise<Either<SymbolServiceError, FmpIncomeStatementList>> {
+    try {
+      console.log(`fetching income staterment for ${symbol}`);
+      const url = `${this.FINANCIAL_MODELING_PREP_URL}/income-statement/${symbol}?period=${period}&limit=${limit}&apikey=${this.financialModelingPrepKey}`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FmpIncomeStatementListSchema.safeParse(data);
+
+      if (parsed.success) {
+        return Right<FmpIncomeStatementList>(parsed.data);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing incompe statement data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get income statement data for symbol ${symbol}`
+        )
       );
     }
   }

@@ -10,12 +10,12 @@ export function getRelativeStrengthLine(
 ): RelativeStrengthLine {
   const dataPoints = benchMarkCandles
     .map((s) => {
-      const symbolCandle = symbolCandles.find((c) => c.date == s.date);
+      const symbolCandle = symbolCandles.find((c) => c.dateStr === s.dateStr);
 
       if (symbolCandle) {
         return {
           date: s.dateStr,
-          value: Number((symbolCandle.close / s.close).toFixed(2)),
+          value: Number((symbolCandle.close / s.close).toFixed(4)),
         };
       } else {
         return undefined;
