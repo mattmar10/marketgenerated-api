@@ -12,7 +12,20 @@ import {
 } from "../financial_modeling_prep_types";
 import { parse } from "dotenv";
 import { Either, Left, Right, Ticker } from "../../MarketGeneratedTypes";
+<<<<<<< Updated upstream
 import { Quote, QuoteArraySchema, QuoteElementSchema } from "./symbol-types";
+=======
+import {
+  FmpIncomeStatementList,
+  FmpIncomeStatementListSchema,
+  FmpNewsList,
+  FmpNewsListSchema,
+  Quote,
+  QuoteArraySchema,
+  SymbolFundamentalChangeStats,
+  SymbolFundamentalChangesStats,
+} from "./symbol-types";
+>>>>>>> Stashed changes
 export type SymbolServiceError = string;
 
 const FMP_BASE_URL = "https://financialmodelingprep.com/api";
@@ -341,4 +354,153 @@ export class SymbolService {
       );
     }
   }
+<<<<<<< Updated upstream
+=======
+
+  public async getNewsForSymbol(
+    symbol: Ticker
+  ): Promise<Either<SymbolServiceError, FmpNewsList>> {
+    try {
+      console.log(`fetching profile for ${symbol}`);
+      const url = `${this.FINANCIAL_MODELING_PREP_URL}/stock_news?tickers=${symbol}&limit=50&apikey=${this.financialModelingPrepKey}`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FmpNewsListSchema.safeParse(data);
+
+      if (parsed.success) {
+        return Right<FmpNewsList>(parsed.data);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing news data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(`Unable to get profile for symbol ${symbol}`)
+      );
+    }
+  }
+
+  public async getIncomeStatementForSymbol(
+    symbol: Ticker,
+    period: PeriodType = "quarter",
+    limit: number = 4
+  ): Promise<Either<SymbolServiceError, FmpIncomeStatementList>> {
+    try {
+      console.log(`fetching income staterment for ${symbol}`);
+      const url = `${this.FINANCIAL_MODELING_PREP_URL}/income-statement/${symbol}?period=${period}&limit=${limit}&apikey=${this.financialModelingPrepKey}`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FmpIncomeStatementListSchema.safeParse(data);
+
+      if (parsed.success) {
+        return Right<FmpIncomeStatementList>(parsed.data);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing incompe statement data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get income statement data for symbol ${symbol}`
+        )
+      );
+    }
+  }
+
+  public async getFundamentalChangeStatsForSymbol(
+    symbol: Ticker,
+    period: PeriodType = "quarter",
+    limit: number = 4
+  ): Promise<Either<SymbolServiceError, SymbolFundamentalChangesStats>> {
+    try {
+      console.log(`fetching fundamental quarter stats for ${symbol}`);
+      const url = `${
+        this.FINANCIAL_MODELING_PREP_URL
+      }/income-statement/${symbol}?period=${period}&limit=${limit + 1}&apikey=${
+        this.financialModelingPrepKey
+      }`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FmpIncomeStatementListSchema.safeParse(data);
+
+      if (parsed.success) {
+        const incomes = parsed.data.reverse();
+        const result: SymbolFundamentalChangeStats[] = [];
+
+        for (let i = 1; i < incomes.length; i++) {
+          const current = incomes[i];
+          const previous = incomes[i - 1];
+
+          const profitChangePercent = Number(
+            this.calculatePercentageChange(
+              current.grossProfit,
+              previous.grossProfit
+            ).toFixed(2)
+          );
+          const epsChangePercent = Number(
+            this.calculatePercentageChange(current.eps, previous.eps).toFixed(2)
+          );
+          const revenueChangePercent = Number(
+            this.calculatePercentageChange(
+              current.revenue,
+              previous.revenue
+            ).toFixed(2)
+          );
+          const incomeChangePercent = Number(
+            this.calculatePercentageChange(
+              current.netIncome,
+              previous.netIncome
+            ).toFixed(2)
+          );
+
+          result.push({
+            date: current.date,
+            profitChangePercent,
+            epsChangePercent,
+            revenueChangePercent,
+            incomeChangePercent,
+          });
+        }
+
+        const stats: SymbolFundamentalChangesStats = {
+          symbol: symbol,
+          stats: result,
+        };
+
+        return Right(stats);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing incompe statement data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get fundamental stats for symbol ${symbol}`
+        )
+      );
+    }
+  }
+
+  private calculatePercentageChange(
+    currentValue: number,
+    previousValue: number
+  ): number {
+    if (previousValue === 0) {
+      return 0; // Handle division by zero case
+    }
+    return ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
+  }
+>>>>>>> Stashed changes
 }

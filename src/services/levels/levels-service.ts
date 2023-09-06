@@ -39,14 +39,14 @@ export class LevelsService {
         `Calculating volatility levels for ${symbol} from ${ranges} `
       );
 
-      const dailyAvg = calculateMean(ranges);
+      const mean = calculateMean(ranges);
       const stdDev = calculatePopulationStandardDeviation(ranges);
 
-      if (dailyAvg && !isMathError(stdDev)) {
+      if (mean && !isMathError(stdDev)) {
         const volatilityData: VolatilityData = {
           period: period,
           standardDeviation: Number(stdDev.toFixed(2)),
-          avgRange: Number(dailyAvg.toFixed(2)),
+          avgRange: Number(mean.toFixed(2)),
           mean: meanValue,
         };
 
