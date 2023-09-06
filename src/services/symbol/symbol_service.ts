@@ -10,22 +10,19 @@ import {
   CandleListSchema,
   CandlesList,
 } from "../financial_modeling_prep_types";
-import { parse } from "dotenv";
+
 import { Either, Left, Right, Ticker } from "../../MarketGeneratedTypes";
-<<<<<<< Updated upstream
-import { Quote, QuoteArraySchema, QuoteElementSchema } from "./symbol-types";
-=======
 import {
   FmpIncomeStatementList,
   FmpIncomeStatementListSchema,
   FmpNewsList,
   FmpNewsListSchema,
+  PeriodType,
   Quote,
   QuoteArraySchema,
   SymbolFundamentalChangeStats,
   SymbolFundamentalChangesStats,
 } from "./symbol-types";
->>>>>>> Stashed changes
 export type SymbolServiceError = string;
 
 const FMP_BASE_URL = "https://financialmodelingprep.com/api";
@@ -165,8 +162,7 @@ export class SymbolService {
       ]);
 
       const parsedProfileData = all[2].filter(
-        (pd) =>
-          pd.isActivelyTrading == true && pd.VolAvg > 50000 && pd.Price > 3
+        (pd) => pd.VolAvg > 50000 && pd.Price > 3
       );
 
       console.log(`Discovered ${parsedProfileData.length} symbols`);
@@ -354,8 +350,6 @@ export class SymbolService {
       );
     }
   }
-<<<<<<< Updated upstream
-=======
 
   public async getNewsForSymbol(
     symbol: Ticker
@@ -502,5 +496,4 @@ export class SymbolService {
     }
     return ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
   }
->>>>>>> Stashed changes
 }

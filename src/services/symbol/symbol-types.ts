@@ -40,8 +40,6 @@ export interface SymbolProfile {
   description?: string;
   isEtf: boolean;
 }
-<<<<<<< Updated upstream
-=======
 
 export const FmpNewsSchema = z.object({
   symbol: z.string(),
@@ -118,4 +116,5 @@ export type FmpIncomeStatementList = z.infer<
 export type FmpIncomeStatementElement = z.infer<
   typeof FmpIncomeStatementElementSchema
 >;
->>>>>>> Stashed changes
+
+export type PeriodType = "quarter" | "annual";

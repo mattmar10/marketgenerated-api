@@ -4,6 +4,7 @@ import {
   controller,
   httpGet,
   next,
+  queryParam,
   request,
   requestParam,
   response,
@@ -14,18 +15,17 @@ import {
   SymbolServiceError,
 } from "../../services/symbol/symbol_service";
 import { Either, match } from "../../MarketGeneratedTypes";
-<<<<<<< Updated upstream
-import { Quote, SymbolProfile } from "../../services/symbol/symbol-types";
-=======
 import {
   FmpIncomeStatementList,
   FmpNewsList,
+  PeriodType,
   Quote,
   SymbolFundamentalChangesStats,
   SymbolProfile,
 } from "../../services/symbol/symbol-types";
->>>>>>> Stashed changes
 import { FMPProfile } from "../../services/financial_modeling_prep_types";
+
+import * as z from "zod";
 
 @controller("/symbol")
 export class SymbolController {
@@ -100,8 +100,6 @@ export class SymbolController {
       }
     }
   }
-<<<<<<< Updated upstream
-=======
 
   @httpGet("/:ticker/news")
   public async news(
@@ -250,5 +248,4 @@ export class SymbolController {
       );
     }
   }
->>>>>>> Stashed changes
 }
