@@ -14,6 +14,27 @@ export function isMovingAverageError(value: any): value is MovingAverageError {
   );
 }
 
+export function ema(
+  period: number,
+  data: number[]
+): MovingAverageError | number {
+  if (data.length < period) {
+    return {
+      movingAvgType: "EMA",
+      error: "Not enough data",
+    };
+  } else {
+    const alpha = 2 / (period + 1);
+    let ema = data[0]; // Initialize EMA with the first data point
+
+    for (let i = 1; i < data.length; i++) {
+      ema = alpha * data[i] + (1 - alpha) * ema;
+    }
+
+    return ema;
+  }
+}
+
 export function sma(
   period: number,
   data: number[]

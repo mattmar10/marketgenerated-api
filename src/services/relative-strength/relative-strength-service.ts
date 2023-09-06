@@ -17,14 +17,22 @@ import {
   RelativeStrength,
   RelativeStrengthError,
   RelativeStrengthLinePoint,
+  RelativeStrengthLineStats,
+  RelativeStrengthPerformers,
   RelativeStrengthPerformersForPeriod,
   RelativeStrengthTimePeriod,
   RelativeStrengthTimePeriodTypes,
   RelativeStrengthsForSymbol,
+  RelativeStrengthsForSymbolStats,
   ReturnData,
   isRelativeStrengthsForSymbol,
 } from "./relative-strength-types";
 import { getRelativeStrengthLine } from "../../indicators/relative-strength";
+import {
+  calculateLinearRegression,
+  calculateLinearRegressionFromNumbers,
+  isLinearRegressionResult,
+} from "../../indicators/linear-regression";
 
 @injectable()
 export class RelativeStrengthService {
@@ -542,7 +550,7 @@ export class RelativeStrengthService {
 
   public getTopCompositeRelativeStrengthPerformers(
     top: number = 50
-  ): CompositeRelativeStrengthPerformers {
+  ): RelativeStrengthPerformers {
     function sortByCompositeScoreDescending(
       a: RelativeStrengthsForSymbol,
       b: RelativeStrengthsForSymbol
@@ -550,13 +558,150 @@ export class RelativeStrengthService {
       return b.compositeScore - a.compositeScore;
     }
 
-    const result: CompositeRelativeStrengthPerformers = {
-      stocks: this.stocksRSForSymbols
-        .sort(sortByCompositeScoreDescending)
-        .slice(0, top),
-      etfs: this.etfsRSForSymbols
-        .sort(sortByCompositeScoreDescending)
-        .slice(0, top),
+    const stocksData = this.stocksRSForSymbols
+      .sort(sortByCompositeScoreDescending)
+      .slice(0, top);
+
+    const etfsData = this.etfsRSForSymbols
+      .sort(sortByCompositeScoreDescending)
+      .slice(0, top);
+
+    function transform(data: RelativeStrengthsForSymbol[]) {
+      return data.flatMap((s) => {
+        const lineData = s.relativeStrengthLine.data.map((d) => d.value);
+        const max = Math.max(...lineData);
+        const min = Math.min(...lineData);
+        const last = lineData[lineData.length - 1];
+        const percent = ((last - min) / (max - min)) * 100;
+        const lr = calculateLinearRegressionFromNumbers(
+          lineData,
+          lineData.length
+        );
+
+        if (isLinearRegressionResult(lr)) {
+          const lineStats: RelativeStrengthLineStats = {
+            fiftyDaySlope: lr.slope,
+            percentOfFiftyTwoWeekRange: Number(percent.toFixed(2)),
+          };
+
+          const result: RelativeStrengthsForSymbolStats = {
+            symbol: s.symbol,
+            relativeStrengths: s.relativeStrengths,
+            relativeStrengthLineStats: lineStats,
+            compositeScore: s.compositeScore,
+          };
+
+          return [result];
+        } else {
+          return [];
+        }
+      });
+    }
+
+    const result: RelativeStrengthPerformers = {
+      stocks: transform(stocksData),
+      etfs: transform(etfsData),
+    };
+
+    return result;
+  }
+
+  public getRelativeStrengthStatsForSymbol(
+    symbol: Ticker
+  ): RelativeStrengthError | RelativeStrengthsForSymbolStats {
+    const relativeStrengthsData = this.getRelativeStrengthsForSymbol(symbol);
+
+    if (isRelativeStrengthsForSymbol(relativeStrengthsData)) {
+      const lineData = relativeStrengthsData.relativeStrengthLine.data.map(
+        (d) => d.value
+      );
+      const max = Math.max(...lineData);
+      const min = Math.min(...lineData);
+      const last = lineData[lineData.length - 1];
+      const percent = ((last - min) / (max - min)) * 100;
+      const lr = calculateLinearRegressionFromNumbers(
+        lineData,
+        lineData.length
+      );
+
+      if (isLinearRegressionResult(lr)) {
+        const lineStats: RelativeStrengthLineStats = {
+          fiftyDaySlope: lr.slope,
+          percentOfFiftyTwoWeekRange: percent,
+        };
+
+        const result: RelativeStrengthsForSymbolStats = {
+          symbol: symbol,
+          relativeStrengths: relativeStrengthsData.relativeStrengths,
+          relativeStrengthLineStats: lineStats,
+          compositeScore: relativeStrengthsData.compositeScore,
+        };
+
+        return result;
+      } else {
+        return `Unable to calculate LR for ${symbol} relative strengths`;
+      }
+    } else {
+      return `Unable to get relative strength stats for ${symbol}`;
+    }
+  }
+
+  public getRelativeStrengthLineLeaders(
+    top: number = 50
+  ): RelativeStrengthPerformers {
+    function sortByLineStrength(
+      a: RelativeStrengthsForSymbolStats,
+      b: RelativeStrengthsForSymbolStats
+    ) {
+      return (
+        b.relativeStrengthLineStats.percentOfFiftyTwoWeekRange -
+        a.relativeStrengthLineStats.percentOfFiftyTwoWeekRange
+      );
+    }
+
+    function transform(data: RelativeStrengthsForSymbol[]) {
+      return data.flatMap((s) => {
+        const lineData = s.relativeStrengthLine.data.map((d) => d.value);
+        const max = Math.max(...lineData);
+        const min = Math.min(...lineData);
+        const last = lineData[lineData.length - 1];
+        const percent = ((last - min) / (max - min)) * 100;
+        const lr = calculateLinearRegressionFromNumbers(
+          lineData,
+          lineData.length
+        );
+
+        if (isLinearRegressionResult(lr)) {
+          const lineStats: RelativeStrengthLineStats = {
+            fiftyDaySlope: lr.slope,
+            percentOfFiftyTwoWeekRange: percent,
+          };
+
+          const result: RelativeStrengthsForSymbolStats = {
+            symbol: s.symbol,
+            relativeStrengths: s.relativeStrengths,
+            relativeStrengthLineStats: lineStats,
+            compositeScore: s.compositeScore,
+          };
+
+          return [result];
+        } else {
+          return [];
+        }
+      });
+    }
+
+    const stocksData = transform(this.stocksRSForSymbols)
+      .sort(sortByLineStrength)
+      .slice(0, top);
+
+    const etfsData = transform(this.etfsRSForSymbols)
+      .sort(sortByLineStrength)
+      .slice(0, top);
+
+    const result: RelativeStrengthPerformers = {
+      stocks: stocksData,
+      etfs: etfsData,
     };
 
     return result;

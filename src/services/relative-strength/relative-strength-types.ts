@@ -48,6 +48,22 @@ export interface RelativeStrengthsForSymbol {
   compositeScore: number;
 }
 
+export interface RelativeStrengthLineStats {
+  fiftyDaySlope: number;
+  percentOfFiftyTwoWeekRange: number;
+}
+
+export interface RelativeStrengthsForSymbolStats {
+  symbol: string;
+  relativeStrengths: RelativeStrength[];
+  relativeStrengthLineStats: RelativeStrengthLineStats;
+  compositeScore: number;
+}
+
+export interface RelativeStrengthPerformers {
+  stocks: RelativeStrengthsForSymbolStats[];
+  etfs: RelativeStrengthsForSymbolStats[];
+}
 export interface RelativeStrengthLinePoint {
   date: string;
   value: number;
@@ -78,4 +94,10 @@ export function isRelativeStrengthsForSymbol(
   data: RelativeStrengthsForSymbol | RelativeStrengthError
 ): data is RelativeStrengthsForSymbol {
   return typeof data !== "string";
+}
+
+export function isRelativeStrengthError(
+  data: RelativeStrengthsForSymbolStats | RelativeStrengthError
+): data is RelativeStrengthError {
+  return typeof data === "string";
 }
