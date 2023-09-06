@@ -28,11 +28,14 @@ export class WeeeklyController {
     @response() res: Response,
     @next() next: NextFunction,
     @requestParam("ticker") ticker: string,
-    @queryParam("period") period: number
+    @queryParam("period") period: string
   ) {
     if (!period || !ticker) {
       res.status(400).json({ error: "Must specify a valid ticker and period" });
     } else {
+      // Parse period as a number
+      const parsedPeriod: number = parseInt(period, 10); // Base 10
+
       const weeklyE = await this.symbolSvc.getWeeklyCandlesForSymbol(
         ticker,
         "2012-01-01",
@@ -47,7 +50,7 @@ export class WeeeklyController {
         case "right":
           const candles = weeklyE.value;
 
-          if (!candles || candles.length < period) {
+          if (!candles || candles.length < parsedPeriod) {
             res
               .status(500)
               .json({ error: `insufficient data found for ${ticker}` });
@@ -70,8 +73,8 @@ export class WeeeklyController {
 
           const levels = this.levelsSvc.calculateVolatilityLevels(
             ticker,
-            period,
-            tailArr.slice(period).reverse(),
+            parsedPeriod,
+            tailArr.slice(parsedPeriod).reverse(),
             head.open
           );
 
@@ -91,19 +94,21 @@ export class WeeeklyController {
     }
   }
 
-  @httpGet("/:ticker/volatility-levels-list")
-  public async weeklyVolatilityLevelsList(
+  @httpGet("/:ticker/volatility-levels-series")
+  public async weeklyVolatilityLevelsSeries(
     @request() req: Request,
     @response() res: Response,
     @next() next: NextFunction,
     @requestParam("ticker") ticker: string,
     @queryParam("startDate") startDate: string,
     @queryParam("endDate") endDate: string,
-    @queryParam("period") period: number
+    @queryParam("period") period: string
   ) {
     if (!period || !ticker) {
       res.status(400).json({ error: "Must specify a valid ticker and period" });
     } else {
+      const parsedPeriod: number = parseInt(period, 10); // Base 10
+
       const weeklyE = await this.symbolSvc.getWeeklyCandlesForSymbol(
         ticker,
         startDate,
@@ -118,7 +123,7 @@ export class WeeeklyController {
         case "right":
           const candles = weeklyE.value;
 
-          if (!candles || candles.length < period) {
+          if (!candles || candles.length < parsedPeriod) {
             res
               .status(500)
               .json({ error: `insufficient data found for ${ticker}` });
@@ -142,7 +147,7 @@ export class WeeeklyController {
 
           const levels = this.levelsSvc.calculateAllVolatilityLevels(
             ticker,
-            period,
+            parsedPeriod,
             mappedCandles
           );
 
