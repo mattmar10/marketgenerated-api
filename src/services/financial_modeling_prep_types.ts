@@ -106,7 +106,7 @@ export const FmpProfileSchema = z.object({
   companyName: z.string(),
   currency: z.string(),
   cik: z.string().nullable(),
-  isin: z.string(),
+  isin: z.string().nullable(),
   cusip: z.string(),
   exchange: z.string(),
   exchangeShortName: z.string(),
