@@ -10,11 +10,17 @@ export type ScreenerResult = {
   dailyIBS: number;
   weeklyIBS: number;
   percentOf52WeekHigh: number;
-  rsRating: number;
   threeMonthRS: number;
   fiftyTwoWeekRSLinePercent: number;
+  relativeStrengthCompositeScore: number;
+  fundamentalRelativeStrengthScore: number;
+  mgScore: number;
   industry?: string;
   sector?: string;
+  fiftySMA: number;
+  twentyEMA: number;
+  tenEMA: number;
+  lastDate: string;
 };
 
 export type GapUpOnVolumeScreenerResult = ScreenerResult & {

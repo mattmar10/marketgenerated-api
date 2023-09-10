@@ -13,10 +13,8 @@ import {
 } from "../../indicators/indicator-utils";
 import { Candle } from "../../modles/candle";
 import {
-  CompositeRelativeStrengthPerformers,
   RelativeStrength,
   RelativeStrengthError,
-  RelativeStrengthLinePoint,
   RelativeStrengthLineStats,
   RelativeStrengthPerformers,
   RelativeStrengthPerformersForPeriod,

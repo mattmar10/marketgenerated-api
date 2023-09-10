@@ -34,11 +34,6 @@ export class LevelsService {
     } else {
       const filtered = candles.slice(-period);
       const ranges = filtered.map((c) => c.high - c.low);
-
-      console.log(
-        `Calculating volatility levels for ${symbol} from ${ranges} `
-      );
-
       const mean = calculateMean(ranges);
       const stdDev = calculatePopulationStandardDeviation(ranges);
 

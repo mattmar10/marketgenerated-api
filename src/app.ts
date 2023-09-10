@@ -14,14 +14,17 @@ import "./controllers/overview/overview-controller";
 import "./controllers/health-controller";
 import "./controllers/symbol/symbol-controller";
 import "./controllers/relative-strength/relative-strength-controller";
+import "./controllers/fundamental-relative-strength/fundamental-relative-strength-controller";
 import "./controllers/search/search-controller";
 import "./controllers/screener/screener-controller";
 import "./controllers/weekly/weekly-controller";
+
 import { SearchService } from "./services/search/search_service";
 import { ScreenerService } from "./services/screener/screener-service";
 import { RelativeStrengthService } from "./services/relative-strength/relative-strength-service";
 import { StockIndexService } from "./services/stock-index/stock-index-service";
 import { LevelsService } from "./services/levels/levels-service";
+import { FundamentalRelativeStrengthService } from "./services/fundamental-relative-strength/funamental-relative-strength-service";
 
 // Load environment variables from .env file
 (async () => {
@@ -131,6 +134,19 @@ import { LevelsService } from "./services/levels/levels-service";
     .to(ScreenerService)
     .inSingletonScope();
 
+  container
+    .bind<FundamentalRelativeStrengthService>(
+      TYPES.FundamentalRelativeStrengthService
+    )
+    .to(FundamentalRelativeStrengthService)
+    .inSingletonScope();
+
+  const fundamentalRelativeStrenghService =
+    container.get<FundamentalRelativeStrengthService>(
+      TYPES.FundamentalRelativeStrengthService
+    );
+
+  fundamentalRelativeStrenghService.initialize();
   server.setConfig((app) => {
     app.use(
       bodyParser.urlencoded({

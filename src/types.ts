@@ -11,6 +11,9 @@ const TYPES = {
   SearchService: Symbol.for("com.marketgenerated.api.SearchService"),
   StockIndexService: Symbol.for("com.marketgenerated.api.StockIndexService"),
   SymbolService: Symbol.for("com.marketgenerated.api.SymbolService"),
+  FundamentalRelativeStrengthService: Symbol.for(
+    "com.marketgenerated.api.FundamentalRelativeStrengthService"
+  ),
 };
 
 export default TYPES;
