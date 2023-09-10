@@ -162,7 +162,7 @@ export class SymbolService {
       ]);
 
       const parsedProfileData = all[2].filter(
-        (pd) => pd.VolAvg > 50000 && pd.Price > 3
+        (pd) => pd.VolAvg > 50000 && pd.Price > 7
       );
 
       console.log(`Discovered ${parsedProfileData.length} symbols`);

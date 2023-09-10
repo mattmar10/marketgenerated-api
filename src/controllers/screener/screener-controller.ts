@@ -70,4 +70,50 @@ export class ScreenerController {
 
     return results;
   }
+
+  @httpGet("/ema-cross")
+  public getEMACross(
+    @request() req: Request,
+    @response() res: Response,
+    @queryParam("minRelativeVolume") minRelativeVolStr: string,
+    @queryParam("minClosePrice") minClosePriceStr: string,
+    @queryParam("emaPeriod") emaPeriodStr: string
+  ) {
+    const minRelativeVol: number = parseFloat(minRelativeVolStr);
+    const minClosePrice: number = parseFloat(minClosePriceStr);
+    const emaPeriod: number = parseInt(emaPeriodStr);
+    const results = this.screenerSvc.emaCrossWithVolume(
+      emaPeriod,
+      minRelativeVol,
+      minClosePrice
+    );
+
+    return results;
+  }
+
+  @httpGet("/launchpad")
+  public launchPad(
+    @request() req: Request,
+    @response() res: Response,
+    @queryParam("minClosePrice") minClosePriceStr: string
+  ) {
+    const minClosePrice: number = parseFloat(minClosePriceStr);
+    const results = this.screenerSvc.launchPad(minClosePrice);
+
+    return results;
+  }
+
+  @httpGet("/mg-leaders")
+  public mgLeaders(
+    @request() req: Request,
+    @response() res: Response,
+    @queryParam("minClosePrice") minClosePriceStr: string,
+    @queryParam("count") countStr: string
+  ) {
+    const minClosePrice: number = parseFloat(minClosePriceStr);
+    const count: number = parseInt(countStr);
+    const results = this.screenerSvc.mgScoreLeaders(minClosePrice, count);
+
+    return results;
+  }
 }
