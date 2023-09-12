@@ -629,6 +629,7 @@ export class ScreenerService {
   }
 
   public launchPad(minClosePrice: number = 5) {
+    console.log("Calculating Launchpad screen");
     const areWithinThreePercent = (
       a: number,
       b: number,
@@ -687,7 +688,6 @@ export class ScreenerService {
         isMovingAverageError(fiftySMA) ||
         isMovingAverageError(avgVol20D)
       ) {
-        console.log(`Unable to calculate moving averages for ${symbol}`);
         continue;
       }
 
@@ -709,6 +709,7 @@ export class ScreenerService {
     minClosePrice: number,
     count: number = 100
   ): ScreenerResult[] {
+    console.log("Calculating MG Score screen");
     const etfs = this.symbolSvc.getEtfs();
     const stocks = this.symbolSvc.getStocks();
 
@@ -904,9 +905,6 @@ export class ScreenerService {
       this.relativeStrengthSvc.getRelativeStrengthStatsForSymbol(symbol);
 
     if (isRelativeStrengthError(rsStats)) {
-      console.error(
-        `Unable to calculate relative strength stats for ${symbol}`
-      );
       return Left(`Unable to calculate relative strength stats for ${symbol}`);
     }
     const rsLinePercent =
