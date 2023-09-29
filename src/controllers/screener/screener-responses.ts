@@ -1,6 +1,6 @@
 import { Ticker } from "../../MarketGeneratedTypes";
 
-export interface TrendTemplateResult {
+export interface TrendTemplateResultOld {
   symbol: Ticker;
   name: string;
   lastClose: number;
@@ -21,8 +21,8 @@ export interface TrendTemplateResult {
   relativeStrengthPercentOfFiftyTwoWeekRange: number;
 }
 
-export interface TrendTemplateResults {
+export interface TrendTemplateResultsOld {
   lastDate: string;
-  stocks: TrendTemplateResult[];
-  etfs: TrendTemplateResult[];
+  stocks: TrendTemplateResultOld[];
+  etfs: TrendTemplateResultOld[];
 }

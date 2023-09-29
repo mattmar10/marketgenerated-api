@@ -30,3 +30,11 @@ export function match<T, L, R>(
       return right(input.value);
   }
 }
+
+export function isRight<L, R>(either: Either<L, R>): either is Right<R> {
+  return either.tag === "right";
+}
+
+export function isLeft<L, R>(either: Either<L, R>): either is Left<L> {
+  return either.tag === "left";
+}
