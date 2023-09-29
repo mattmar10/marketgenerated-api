@@ -1,12 +1,15 @@
 import { inject, injectable } from "inversify";
 import TYPES from "../../types";
 import { DailyCacheService } from "../daily_cache_service";
+
 import {
-  TrendTemplateResult,
-  TrendTemplateResults,
-} from "../../controllers/screener/screener-responses";
-import { httpGet } from "inversify-express-utils";
-import { Either, Left, Right, Ticker, match } from "../../MarketGeneratedTypes";
+  Either,
+  Left,
+  Right,
+  Ticker,
+  isLeft,
+  match,
+} from "../../MarketGeneratedTypes";
 import { Candle } from "../../modles/candle";
 import {
   filterCandlesPast52Weeks,
@@ -35,7 +38,12 @@ import {
   isRelativeStrengthError,
   isRelativeStrengthsForSymbol,
 } from "../relative-strength/relative-strength-types";
-import { GapUpOnVolumeScreenerResult, ScreenerResult } from "./screener-types";
+import {
+  GapUpOnVolumeScreenerResult,
+  ScreenerResult,
+  TrendTemplateResult,
+  TrendTemplateResults,
+} from "./screener-types";
 import { FundamentalRelativeStrengthService } from "../fundamental-relative-strength/funamental-relative-strength-service";
 import { FMPSymbolProfileData } from "../financial_modeling_prep_types";
 
@@ -44,27 +52,18 @@ export interface TrendTemplateError {
   error: string;
 }
 
-function isTrendTemplateError(value: any): value is TrendTemplateError {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "symbol" in value &&
-    "error" in value
-  );
-}
-
 function passesTrendTemplateCriteria(ttr: TrendTemplateResult): boolean {
   const lowThreshold = ttr.fiftyTwoWeekLow + 0.3 * ttr.fiftyTwoWeekLow;
   const highThreshold = ttr.fiftyTwoWeekHigh - 0.25 * ttr.fiftyTwoWeekHigh;
 
   return (
     //ttr.lastClose > ttr.fiftyMA &&
-    ttr.fiftyMA > ttr.oneFiftyMA &&
-    ttr.oneFiftyMA > ttr.twoHundredMA &&
+    ttr.fiftySMA > ttr.oneFiftySMA &&
+    ttr.oneFiftySMA > ttr.twoHundredSMA &&
     ttr.twoHudredMALRSlope > 0 &&
-    ttr.lastClose > lowThreshold &&
-    ttr.lastClose > highThreshold &&
-    ttr.compositeRelativeStrength > 75
+    ttr.last > lowThreshold &&
+    ttr.last > highThreshold &&
+    ttr.relativeStrengthCompositeScore > 75
   );
 }
 
@@ -75,13 +74,13 @@ function passesShortTermTrendTemplateCriteria(
   const highThreshold = ttr.fiftyTwoWeekHigh - 0.25 * ttr.fiftyTwoWeekHigh;
 
   return (
-    ttr.lastClose > ttr.fiftyMA &&
-    ttr.fiftyMA > ttr.oneFiftyMA &&
-    ttr.oneFiftyMA > ttr.twoHundredMA &&
+    ttr.last > ttr.fiftySMA &&
+    ttr.fiftySMA > ttr.oneFiftySMA &&
+    ttr.oneFiftySMA > ttr.twoHundredSMA &&
     ttr.twoHudredMALRSlope > 0 &&
-    ttr.lastClose > lowThreshold &&
-    ttr.lastClose > highThreshold &&
-    ttr.compositeRelativeStrength > 75
+    ttr.last > lowThreshold &&
+    ttr.last > highThreshold &&
+    ttr.relativeStrengthCompositeScore > 75
   );
 }
 
@@ -138,36 +137,41 @@ export class ScreenerService {
         continue;
       }
 
-      const companyName = symbolData.companyName;
       const trendTemplateResult = this.buildTrendTemplateResult(
-        symbol,
-        companyName,
+        symbolData,
         sorted,
         90
       );
 
-      if (isTrendTemplateError(trendTemplateResult)) {
-        trendTemplateErrors.push(trendTemplateResult);
-      } else if (passesTrendTemplateCriteria(trendTemplateResult)) {
-        if (symbolData.isEtf) {
-          longTermEtfResults.push(trendTemplateResult);
-        } else {
-          longTermStockResults.push(trendTemplateResult);
+      match(
+        trendTemplateResult,
+        (error) => {
+          trendTemplateErrors.push(error);
+        },
+        (data) => {
+          if (passesTrendTemplateCriteria(data)) {
+            if (symbolData.isEtf) {
+              longTermEtfResults.push(data);
+            } else {
+              longTermStockResults.push(data);
+            }
+          }
         }
-      }
+      );
     }
 
     // Sort the results arrays in descending order based on compositeRelativeStrength
     const sortedStocks = [...longTermStockResults].sort(
-      (a, b) => b.compositeRelativeStrength - a.compositeRelativeStrength
+      (a, b) =>
+        b.relativeStrengthCompositeScore - a.relativeStrengthCompositeScore
     );
 
     const sortedEtfs = [...longTermEtfResults].sort(
-      (a, b) => b.compositeRelativeStrength - a.compositeRelativeStrength
+      (a, b) =>
+        b.relativeStrengthCompositeScore - a.relativeStrengthCompositeScore
     );
 
     const trendTemplateResults: TrendTemplateResults = {
-      lastDate: this.cacheSvc.getLastDate()!,
       stocks: sortedStocks,
       etfs: sortedEtfs,
     };
@@ -198,36 +202,41 @@ export class ScreenerService {
         continue;
       }
 
-      const companyName = symbolData.companyName;
       const trendTemplateResult = this.buildTrendTemplateResult(
-        symbol,
-        companyName,
+        symbolData,
         sorted,
-        20
+        90
       );
 
-      if (isTrendTemplateError(trendTemplateResult)) {
-        trendTemplateErrors.push(trendTemplateResult);
-      } else if (passesShortTermTrendTemplateCriteria(trendTemplateResult)) {
-        if (symbolData.isEtf) {
-          shortTermEtfResults.push(trendTemplateResult);
-        } else {
-          shortTermStockResults.push(trendTemplateResult);
+      match(
+        trendTemplateResult,
+        (error) => {
+          trendTemplateErrors.push(error);
+        },
+        (data) => {
+          if (passesShortTermTrendTemplateCriteria(data)) {
+            if (symbolData.isEtf) {
+              shortTermEtfResults.push(data);
+            } else {
+              shortTermStockResults.push(data);
+            }
+          }
         }
-      }
+      );
     }
 
     // Sort the results arrays in descending order based on compositeRelativeStrength
     const sortedStocks = [...shortTermStockResults].sort(
-      (a, b) => b.compositeRelativeStrength - a.compositeRelativeStrength
+      (a, b) =>
+        b.relativeStrengthCompositeScore - a.relativeStrengthCompositeScore
     );
 
     const sortedEtfs = [...shortTermEtfResults].sort(
-      (a, b) => b.compositeRelativeStrength - a.compositeRelativeStrength
+      (a, b) =>
+        b.relativeStrengthCompositeScore - a.relativeStrengthCompositeScore
     );
 
     const trendTemplateResults: TrendTemplateResults = {
-      lastDate: this.cacheSvc.getLastDate()!,
       stocks: sortedStocks,
       etfs: sortedEtfs,
     };
@@ -236,38 +245,40 @@ export class ScreenerService {
   }
 
   private buildTrendTemplateResult(
-    ticker: Ticker,
-    name: string,
+    symbolData: FMPSymbolProfileData,
     candles: Candle[],
     period: number
-  ): TrendTemplateError | TrendTemplateResult {
+  ): Either<TrendTemplateError, TrendTemplateResult> {
     const filtered = filterCandlesPast52Weeks(candles);
 
     if (!filtered || filtered.length <= 200) {
       const err: TrendTemplateError = {
-        symbol: ticker,
+        symbol: symbolData.Symbol,
         error: "Not enough candles to calculate trend template",
       };
 
-      return err;
+      return Left(err);
     }
 
     const closes = filtered.map((c) => c.close);
-    const fiftyTwoWeekLow = Math.min(...closes);
-    const fiftyTwoWeekHigh = Math.max(...closes);
 
     const twoHundredSMA = sma(200, closes);
+    const oneFiftySMA = sma(150, closes);
 
     const allSorted = sortCandlesByDate(candles).map((c) => c.close);
     const twoHundredSMASeq = smaSeq(200, allSorted);
 
-    if (isMovingAverageError(twoHundredSMASeq)) {
+    if (
+      isMovingAverageError(twoHundredSMASeq) ||
+      isMovingAverageError(twoHundredSMA) ||
+      isMovingAverageError(oneFiftySMA)
+    ) {
       const err: TrendTemplateError = {
-        symbol: ticker,
+        symbol: symbolData.Symbol,
         error: "Not enough candles to calculate 200 MA",
       };
 
-      return err;
+      return Left(err);
     }
 
     const last = twoHundredSMASeq.slice(-period);
@@ -275,105 +286,31 @@ export class ScreenerService {
 
     if (!isLinearRegressionResult(linearReg)) {
       const err: TrendTemplateError = {
-        symbol: ticker,
+        symbol: symbolData.Symbol,
         error: "Error calculating linear regression of 200MA",
       };
 
-      return err;
+      return Left(err);
     }
 
-    const oneFiftySMA = sma(150, closes);
-    const fiftySMA = sma(50, closes);
+    const screenerResultEither = this.buildScreenerResult(symbolData, 10);
 
-    const volumes = filtered.map((c) => c.volume);
-    const ranges = filtered.map((c) => c.high - c.low);
-
-    const lastTwentyVolumes = volumes.slice(-20);
-    const lastTwentyRanges = ranges.slice(-20);
-
-    const avgVolume = calculateMean(lastTwentyVolumes);
-    const avgRange = calculateMean(lastTwentyRanges);
-    const linearRegressionVolume = calculateLinearRegressionFromNumbers(
-      lastTwentyVolumes,
-      20
-    );
-    const linearRegressionVolatility = calculateLinearRegressionFromNumbers(
-      lastTwentyRanges,
-      20
-    );
-
-    const lastVolume = volumes[volumes.length - 1];
-    const lastRange = ranges[ranges.length - 1];
-
-    if (
-      isMovingAverageError(twoHundredSMA) ||
-      isMovingAverageError(oneFiftySMA) ||
-      isMovingAverageError(fiftySMA) ||
-      isString(linearRegressionVolatility) ||
-      isString(linearRegressionVolume)
-    ) {
+    if (isLeft(screenerResultEither)) {
       const err: TrendTemplateError = {
-        symbol: ticker,
-        error: "error calculating Moving averages",
+        symbol: symbolData.Symbol,
+        error: screenerResultEither.value,
+      };
+      return Left(err);
+    } else {
+      const ttResult: TrendTemplateResult = {
+        ...screenerResultEither.value,
+        oneFiftySMA: oneFiftySMA,
+        twoHundredSMA: twoHundredSMA,
+        twoHudredMALRSlope: linearReg.slope,
       };
 
-      return err;
+      return Right(ttResult);
     }
-
-    const relativeStrengthRes =
-      this.relativeStrengthSvc.getCompositeRelativeStrengthForSymbol(ticker);
-
-    const lastClose = Number(closes[closes.length - 1].toFixed(2));
-
-    const percentageAwayFromFiftyMA = ((lastClose - fiftySMA) / fiftySMA) * 100;
-
-    const benchMarkCandles = this.cacheSvc.getCandles("SPY");
-    const filteredBenchmarkCandles = filterCandlesPast52Weeks(benchMarkCandles);
-    const rsLine = getRelativeStrengthLine(filteredBenchmarkCandles, filtered);
-
-    if (!rsLine) {
-      const err: TrendTemplateError = {
-        symbol: ticker,
-        error: "error calculating rs line",
-      };
-
-      return err;
-    }
-
-    const values = rsLine.data.map((p) => p.value);
-    const maxVal = Math.max(...values);
-    const minVal = Math.min(...values);
-    const lastValue = values[values.length - 1];
-
-    const fiftyTwoWeekRSLinePercent =
-      maxVal === minVal ? 0 : ((lastValue - minVal) / (maxVal - minVal)) * 100;
-
-    const result: TrendTemplateResult = {
-      symbol: ticker,
-      name: name,
-      lastClose: Number(lastClose.toFixed(2)),
-      lastVolume: lastVolume,
-      twoHundredMA: Number(twoHundredSMA.toFixed(2)),
-      oneFiftyMA: Number(oneFiftySMA.toFixed(2)),
-      fiftyMA: Number(fiftySMA.toFixed(2)),
-      twoHudredMALRSlope: Number(linearReg.slope.toFixed(2)),
-      fiftyTwoWeekHigh: Number(fiftyTwoWeekHigh.toFixed(2)),
-      fiftyTwoWeekLow: Number(fiftyTwoWeekLow.toFixed(2)),
-      compositeRelativeStrength: Number(relativeStrengthRes.toFixed(2)),
-      percentFrom50MA: Number(percentageAwayFromFiftyMA.toFixed(2)),
-      lastTwentyAvgVolume: Number(avgVolume?.toFixed(2)),
-      lastDailyRange: Number(lastRange.toFixed(2)),
-      lastTwentyVolumeLinearRegressionSlope: Number(
-        linearRegressionVolume.slope.toFixed(2)
-      ),
-      lastTwentyAvgDailyRange: Number(avgRange?.toFixed(2)),
-      lastTwentDailyRangeLinearRegressionSlope: Number(
-        linearRegressionVolatility.slope.toFixed(2)
-      ),
-      relativeStrengthPercentOfFiftyTwoWeekRange: fiftyTwoWeekRSLinePercent,
-    };
-
-    return result;
   }
 
   public emaCrossWithVolume(
@@ -443,9 +380,6 @@ export class ScreenerService {
       );
 
       if (isRelativeStrengthError(rsStats)) {
-        console.error(
-          `Unable to calculate relative strength stats for ${symbol}`
-        );
         continue;
       }
 
@@ -500,7 +434,6 @@ export class ScreenerService {
           minClosePrice ||
         fiftyTwoWeekCandles.length < 50
       ) {
-        console.error(`Missing data for ${symbolData.Symbol}`);
         continue;
       }
 
@@ -592,7 +525,6 @@ export class ScreenerService {
         fiftyTwoWeekCandles.length < 20 ||
         fiftyTwoWeekCandles.length < 240
       ) {
-        console.error(`Missing data for ${symbolData.Symbol}`);
         continue;
       }
 
@@ -667,7 +599,6 @@ export class ScreenerService {
           minClosePrice ||
         fiftyTwoWeekCandles.length < 50
       ) {
-        console.error(`Missing data for ${symbolData.Symbol}`);
         continue;
       }
 
@@ -919,6 +850,8 @@ export class ScreenerService {
       name: symbolData.companyName,
       isEtf: symbolData.isEtf,
       last: tail.close,
+      fiftyTwoWeekHigh: fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: fiftyTwoWeekLow,
       lastReturnPercent: Number((returns * 100).toFixed(2)),
       volume: tail.volume,
       avgVolume20D: Number(avgVol20D.toFixed(2)),

@@ -6,6 +6,8 @@ export type ScreenerResult = {
   lastReturnPercent: number;
   volume: number;
   avgVolume20D: number;
+  fiftyTwoWeekHigh: number;
+  fiftyTwoWeekLow: number;
   relativeVolume20D: number;
   dailyIBS: number;
   weeklyIBS: number;
@@ -26,3 +28,14 @@ export type ScreenerResult = {
 export type GapUpOnVolumeScreenerResult = ScreenerResult & {
   gapUpPercent: number;
 };
+
+export type TrendTemplateResult = ScreenerResult & {
+  oneFiftySMA: number;
+  twoHundredSMA: number;
+  twoHudredMALRSlope: number;
+};
+
+export interface TrendTemplateResults {
+  stocks: TrendTemplateResult[];
+  etfs: TrendTemplateResult[];
+}

@@ -130,11 +130,6 @@ import { FundamentalRelativeStrengthService } from "./services/fundamental-relat
     .inSingletonScope();
 
   container
-    .bind<ScreenerService>(TYPES.ScreenerService)
-    .to(ScreenerService)
-    .inSingletonScope();
-
-  container
     .bind<FundamentalRelativeStrengthService>(
       TYPES.FundamentalRelativeStrengthService
     )
@@ -146,7 +141,14 @@ import { FundamentalRelativeStrengthService } from "./services/fundamental-relat
       TYPES.FundamentalRelativeStrengthService
     );
 
-  fundamentalRelativeStrenghService.initialize();
+  console.log("initializing funamental relative strengths service");
+  await fundamentalRelativeStrenghService.initialize();
+
+  console.log("initializing screener service");
+  container
+    .bind<ScreenerService>(TYPES.ScreenerService)
+    .to(ScreenerService)
+    .inSingletonScope();
   server.setConfig((app) => {
     app.use(
       bodyParser.urlencoded({
