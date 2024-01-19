@@ -103,6 +103,18 @@ export class ScreenerController {
     return results;
   }
 
+  @httpGet("/institutional-support")
+  public institutionalSupport(
+    @request() req: Request,
+    @response() res: Response,
+    @queryParam("minClosePrice") minClosePriceStr: string
+  ) {
+    const minClosePrice: number = parseFloat(minClosePriceStr);
+    const results = this.screenerSvc.institutionalSupport(minClosePrice);
+
+    return results;
+  }
+
   @httpGet("/mg-leaders")
   public mgLeaders(
     @request() req: Request,

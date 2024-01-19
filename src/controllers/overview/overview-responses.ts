@@ -74,3 +74,20 @@ export interface DailySectorOverview {
 export interface DailySectorsOverview {
   sectors: DailySectorOverview[];
 }
+
+export interface AdvanceDeclineDataPoint {
+  dateStr: string;
+  value: number;
+}
+export interface AdvanceDeclineOverview {
+  lineseries: AdvanceDeclineDataPoint[];
+}
+
+export interface PercentAboveMAPoint {
+  dateStr: string;
+  percentAboveMA: number;
+}
+
+export interface PercentAboveSMALine {
+  timeSeries: PercentAboveMAPoint[];
+}

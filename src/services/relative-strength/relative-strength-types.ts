@@ -43,9 +43,16 @@ export type RelativeStrengthTimePeriod =
 
 export interface RelativeStrengthsForSymbol {
   symbol: string;
+  name?: string;
+  industry?: string;
+  sector?: string;
   relativeStrengths: RelativeStrength[];
   relativeStrengthLine: RelativeStrengthLine;
   compositeScore: number;
+  lastClose: number;
+  tenEMA: number;
+  twentyEMA: number;
+  fiftySMA: number;
 }
 
 export interface RelativeStrengthLineStats {
@@ -55,9 +62,16 @@ export interface RelativeStrengthLineStats {
 
 export interface RelativeStrengthsForSymbolStats {
   symbol: string;
+  name?: string;
+  industry?: string;
+  sector?: string;
   relativeStrengths: RelativeStrength[];
   relativeStrengthLineStats: RelativeStrengthLineStats;
   compositeScore: number;
+  lastClose: number;
+  tenEMA: number;
+  twentyEMA: number;
+  fiftySMA: number;
 }
 
 export interface RelativeStrengthPerformers {
