@@ -23,6 +23,7 @@ export type ScreenerResult = {
   twentyEMA: number;
   tenEMA: number;
   lastDate: string;
+  resultDateTime: string;
 };
 
 export type GapUpOnVolumeScreenerResult = ScreenerResult & {

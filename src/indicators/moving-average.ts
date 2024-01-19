@@ -1,3 +1,5 @@
+import { Candle } from "../modles/candle";
+
 export type MovingAverageType = "SMA" | "EMA";
 
 export interface MovingAverageError {
@@ -50,6 +52,71 @@ export function sma(
 
     return sum / sliced.length;
   }
+}
+
+export interface MovingAverageLinePoint {
+  time: string;
+  value: number;
+}
+export interface MovingAverageLine {
+  period: number;
+  timeseries: MovingAverageLinePoint[];
+}
+
+export function calculateSMA(
+  candles: Candle[],
+  period: number
+): MovingAverageLine | MovingAverageError {
+  if (candles.length < period) {
+    return {
+      movingAvgType: "SMA",
+      error: "Not enough data to calculate SMA",
+    };
+  }
+
+  const smaData = [];
+
+  for (let i = period - 1; i < candles.length; i++) {
+    const sum = candles
+      .slice(i - period + 1, i + 1)
+      .reduce((total, c) => total + c.close, 0);
+
+    const average = sum / period;
+    smaData.push({ time: candles[i].dateStr!, value: average });
+  }
+
+  return {
+    period: period,
+    timeseries: smaData,
+  };
+}
+
+export function calculateEMA(
+  candles: Candle[],
+  period: number
+): MovingAverageLine | MovingAverageError {
+  if (candles.length < period) {
+    return {
+      movingAvgType: "EMA",
+      error: "Not enough data to calculate EMA",
+    };
+  }
+
+  const multiplier = 2 / (period + 1);
+
+  const emaData = [];
+  let ema =
+    candles.slice(0, period).reduce((sum, c) => sum + c.close, 0) / period;
+
+  for (let i = period; i < candles.length; i++) {
+    ema = (candles[i].close - ema) * multiplier + ema;
+    emaData.push({ time: candles[i].dateStr!, value: ema });
+  }
+
+  return {
+    period: period,
+    timeseries: emaData,
+  };
 }
 
 export function smaSeq(

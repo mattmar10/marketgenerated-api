@@ -5,10 +5,7 @@ import {
   StockIndexConstituentListSchema,
 } from "./stock-index-types";
 import axios from "axios";
-import {
-  FMPHistoricalArraySchema,
-  FmpHistoricalListResultSchema,
-} from "../financial_modeling_prep_types";
+import { FmpHistoricalListResultSchema } from "../financial_modeling_prep_types";
 
 type StockIndexServiceError = string;
 

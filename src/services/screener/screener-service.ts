@@ -32,12 +32,7 @@ import { SymbolService } from "../symbol/symbol_service";
 import { calculateMean } from "../../utils/math_utils";
 import { getRelativeStrengthLine } from "../../indicators/relative-strength";
 
-import {
-  RelativeStrengthError,
-  RelativeStrengthsForSymbolStats,
-  isRelativeStrengthError,
-  isRelativeStrengthsForSymbol,
-} from "../relative-strength/relative-strength-types";
+import { isRelativeStrengthError } from "../relative-strength/relative-strength-types";
 import {
   GapUpOnVolumeScreenerResult,
   ScreenerResult,
@@ -205,7 +200,7 @@ export class ScreenerService {
       const trendTemplateResult = this.buildTrendTemplateResult(
         symbolData,
         sorted,
-        90
+        60
       );
 
       match(
@@ -307,6 +302,7 @@ export class ScreenerService {
         oneFiftySMA: oneFiftySMA,
         twoHundredSMA: twoHundredSMA,
         twoHudredMALRSlope: linearReg.slope,
+        resultDateTime: new Date().toLocaleString(),
       };
 
       return Right(ttResult);
@@ -440,7 +436,7 @@ export class ScreenerService {
       const [head, tail] = fiftyTwoWeekCandles.slice(-2);
 
       const allButLast = fiftyTwoWeekCandles.slice(0, -1);
-      const closes = allButLast.map((c) => c.close);
+      const closes = fiftyTwoWeekCandles.map((c) => c.close);
       const tenEMA = ema(10, closes);
       const twentyOneEMA = ema(21, closes);
       const fiftySMA = sma(50, closes);
@@ -558,6 +554,112 @@ export class ScreenerService {
     console.log("Finished Calculating Gap Up on Volume Screen");
 
     return filtered;
+  }
+
+  areNumbersWithinPercentage = (
+    num1: number,
+    num2: number,
+    percentage: number
+  ): boolean => {
+    const average = (num1 + num2) / 2;
+    const allowedDifference = (percentage / 100) * average;
+    const absoluteDifference = Math.abs(num1 - num2);
+
+    return absoluteDifference <= allowedDifference;
+  };
+
+  public institutionalSupport(minClosePrice: number = 10) {
+    console.log("Calculating Institutional Support screen");
+
+    const etfs = this.symbolSvc.getEtfs();
+    const stocks = this.symbolSvc.getStocks();
+
+    const filteredResults: ScreenerResult[] = [];
+
+    for (const symbolData of [...stocks, ...etfs]) {
+      const symbol = symbolData.Symbol;
+      const candles = this.cacheSvc.getCandles(symbol);
+
+      if (!candles || candles.length === 0) {
+        continue;
+      }
+
+      const fiftyTwoWeekCandles = filterCandlesPast52Weeks(candles);
+
+      const weekCandles = filterCandlesPastWeeks(fiftyTwoWeekCandles, 1);
+      if (!weekCandles || weekCandles.length == 0) {
+        console.log("Unable to generate a week candle");
+        continue;
+      }
+
+      if (
+        fiftyTwoWeekCandles[fiftyTwoWeekCandles.length - 1].close <
+          minClosePrice ||
+        fiftyTwoWeekCandles.length < 50
+      ) {
+        continue;
+      }
+      const closes = fiftyTwoWeekCandles.map((c) => c.close);
+
+      const volumes = fiftyTwoWeekCandles.map((c) => c.volume);
+      const dailyIBS = internalBarStrength(
+        fiftyTwoWeekCandles[fiftyTwoWeekCandles.length - 1]
+      );
+
+      const lastVol = volumes[volumes.length - 1];
+      const lastClose = closes[closes.length - 1];
+
+      const fiftySMASeq = smaSeq(50, closes);
+      const twoHundredSMASeq = smaSeq(200, closes);
+
+      const lastTwenty = fiftyTwoWeekCandles.slice(-20);
+      const lastTwentyVolumes = lastTwenty.map((c) => c.volume);
+      const avgVol20D = sma(20, lastTwentyVolumes);
+
+      if (
+        isMovingAverageError(fiftySMASeq) ||
+        isMovingAverageError(twoHundredSMASeq)
+      ) {
+        continue;
+      }
+
+      const linearReg = calculateLinearRegressionFromNumbers(fiftySMASeq, 20);
+      const linearReg2 = calculateLinearRegressionFromNumbers(
+        twoHundredSMASeq,
+        40
+      );
+
+      if (
+        isMovingAverageError(fiftySMASeq) ||
+        isMovingAverageError(avgVol20D) ||
+        !isLinearRegressionResult(linearReg) ||
+        !isLinearRegressionResult(linearReg2)
+      ) {
+        continue;
+      }
+
+      if (
+        this.areNumbersWithinPercentage(
+          lastClose,
+          fiftySMASeq[fiftySMASeq.length - 1],
+          7
+        ) &&
+        dailyIBS > 0.8 &&
+        linearReg.slope > 0 &&
+        linearReg2.slope > 0 &&
+        lastVol > avgVol20D
+      ) {
+        const result = this.buildScreenerResult(symbolData, minClosePrice);
+
+        match(
+          result,
+          (errorString) => console.error(errorString),
+          (data) => filteredResults.push(data)
+        );
+      }
+    }
+
+    return filteredResults;
   }
 
   public launchPad(minClosePrice: number = 5) {
@@ -872,6 +974,7 @@ export class ScreenerService {
       twentyEMA: Number(twentyEMA.toFixed(2)),
       tenEMA: Number(tenEMA.toFixed(2)),
       lastDate: tail.dateStr!,
+      resultDateTime: new Date().toLocaleString(),
     };
 
     return Right(result);

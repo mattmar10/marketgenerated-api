@@ -1,7 +1,7 @@
 import { inject, injectable } from "inversify";
 import { DailyCacheService } from "../daily_cache_service";
 import TYPES from "../../types";
-import { Ticker } from "../../MarketGeneratedTypes";
+import { Ticker, isRight } from "../../MarketGeneratedTypes";
 import { SymbolService } from "../symbol/symbol_service";
 import {
   calculatePercentageReturn,
@@ -31,6 +31,11 @@ import {
   calculateLinearRegressionFromNumbers,
   isLinearRegressionResult,
 } from "../../indicators/linear-regression";
+import {
+  ema,
+  isMovingAverageError,
+  sma,
+} from "../../indicators/moving-average";
 
 @injectable()
 export class RelativeStrengthService {
@@ -306,36 +311,78 @@ export class RelativeStrengthService {
 
       const symbolCandles: Candle[] = this.cacheSvc.getCandles(key);
 
-      const relativeStringForSym: RelativeStrengthsForSymbol = {
-        symbol: key,
-        relativeStrengths: value,
-        relativeStrengthLine: getRelativeStrengthLine(
-          spyCandles,
-          symbolCandles
-        ),
-        compositeScore: compositeRelativeStrength,
-      };
+      const sorted = filterCandlesPast52Weeks(symbolCandles);
+      const closes = sorted.map((c) => c.close);
+      const twentyEMA = ema(20, closes);
+      const tenEMA = ema(10, closes);
+      const fiftySMA = sma(50, closes);
 
-      this.stocksRSForSymbols.push(relativeStringForSym);
+      if (
+        !isMovingAverageError(tenEMA) &&
+        !isMovingAverageError(twentyEMA) &&
+        !isMovingAverageError(fiftySMA)
+      ) {
+        var profileData = stocks.find((s) => s.Symbol === key);
+
+        const relativeStringForSym: RelativeStrengthsForSymbol = {
+          symbol: key,
+          name: profileData?.companyName,
+          relativeStrengths: value,
+          relativeStrengthLine: getRelativeStrengthLine(
+            spyCandles,
+            symbolCandles
+          ),
+          compositeScore: compositeRelativeStrength,
+          lastClose: sorted[sorted.length - 1].close,
+          industry: profileData?.industry,
+          sector: profileData?.sector,
+          tenEMA: tenEMA,
+          twentyEMA: twentyEMA,
+          fiftySMA: fiftySMA,
+        };
+
+        this.stocksRSForSymbols.push(relativeStringForSym);
+      }
     });
 
     etfsRSTickerMap.forEach((value, key) => {
+      var profileData = etfs.find((e) => e.Symbol === key);
+
       const compositeRelativeStrength =
         this.calculateCompositeRelativeStrength(value);
 
       const symbolCandles: Candle[] = this.cacheSvc.getCandles(key);
 
-      const relativeStringForSym: RelativeStrengthsForSymbol = {
-        symbol: key,
-        relativeStrengths: value,
-        relativeStrengthLine: getRelativeStrengthLine(
-          spyCandles,
-          symbolCandles
-        ),
-        compositeScore: compositeRelativeStrength,
-      };
+      const sorted = filterCandlesPast52Weeks(symbolCandles);
+      const closes = sorted.map((c) => c.close);
+      const twentyEMA = ema(20, closes);
+      const tenEMA = ema(10, closes);
+      const fiftySMA = sma(50, closes);
 
-      this.etfsRSForSymbols.push(relativeStringForSym);
+      if (
+        !isMovingAverageError(tenEMA) &&
+        !isMovingAverageError(twentyEMA) &&
+        !isMovingAverageError(fiftySMA)
+      ) {
+        const relativeStringForSym: RelativeStrengthsForSymbol = {
+          symbol: key,
+          name: profileData?.companyName,
+          relativeStrengths: value,
+          relativeStrengthLine: getRelativeStrengthLine(
+            spyCandles,
+            symbolCandles
+          ),
+          compositeScore: compositeRelativeStrength,
+          lastClose: sorted[sorted.length - 1].close,
+          industry: "",
+          sector: "",
+          tenEMA: tenEMA,
+          twentyEMA: twentyEMA,
+          fiftySMA: fiftySMA,
+        };
+
+        this.etfsRSForSymbols.push(relativeStringForSym);
+      }
     });
 
     console.log("Relative strength calculated");
@@ -587,6 +634,12 @@ export class RelativeStrengthService {
             relativeStrengths: s.relativeStrengths,
             relativeStrengthLineStats: lineStats,
             compositeScore: s.compositeScore,
+            lastClose: s.lastClose,
+            industry: s.industry,
+            sector: s.sector,
+            tenEMA: s.tenEMA,
+            twentyEMA: s.twentyEMA,
+            fiftySMA: s.fiftySMA,
           };
 
           return [result];
@@ -633,6 +686,10 @@ export class RelativeStrengthService {
           relativeStrengths: relativeStrengthsData.relativeStrengths,
           relativeStrengthLineStats: lineStats,
           compositeScore: relativeStrengthsData.compositeScore,
+          lastClose: relativeStrengthsData.lastClose,
+          tenEMA: relativeStrengthsData.tenEMA,
+          twentyEMA: relativeStrengthsData.twentyEMA,
+          fiftySMA: relativeStrengthsData.fiftySMA,
         };
 
         return result;
@@ -645,7 +702,8 @@ export class RelativeStrengthService {
   }
 
   public getRelativeStrengthLineLeaders(
-    top: number = 50
+    top: number = 50,
+    minClosePrice = 10
   ): RelativeStrengthPerformers {
     function sortByLineStrength(
       a: RelativeStrengthsForSymbolStats,
@@ -677,9 +735,16 @@ export class RelativeStrengthService {
 
           const result: RelativeStrengthsForSymbolStats = {
             symbol: s.symbol,
+            name: s.name,
+            industry: s.industry,
+            sector: s.sector,
             relativeStrengths: s.relativeStrengths,
             relativeStrengthLineStats: lineStats,
-            compositeScore: s.compositeScore,
+            compositeScore: Number(s.compositeScore.toFixed(2)),
+            lastClose: s.lastClose,
+            tenEMA: Number(s.tenEMA.toFixed(2)),
+            twentyEMA: Number(s.twentyEMA.toFixed(2)),
+            fiftySMA: Number(s.fiftySMA.toFixed(2)),
           };
 
           return [result];

@@ -5,11 +5,6 @@ import { Ticker, match } from "../../MarketGeneratedTypes";
 import { createGunzip } from "zlib";
 import { pipeline } from "stream/promises";
 
-import {
-  calculateLinearRegression,
-  calculateLinearRegressionFromNumbers,
-  isLinearRegressionResult,
-} from "../../indicators/linear-regression";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 type FundamentalStrengthScore = {

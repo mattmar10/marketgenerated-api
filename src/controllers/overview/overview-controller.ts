@@ -3,13 +3,17 @@ import { inject } from "inversify";
 import {
   controller,
   httpGet,
+  queryParam,
   request,
+  requestParam,
   response,
 } from "inversify-express-utils";
 import { DailyCacheService } from "../../services/daily_cache_service";
 import { OverviewService } from "../../services/overview/overview-service";
 import TYPES from "../../types";
 import { ETFOverviewPriceReturns } from "./overview-responses";
+import moment = require("moment");
+import { MajorStockIndex } from "../../services/stock-index/stock-index-types";
 
 @controller("/overview")
 export class OverviewController {
@@ -54,5 +58,28 @@ export class OverviewController {
   public sectors(@request() req: Request, @response() res: Response) {
     const sectors = this.overviewSvc.getDailySectorOverview();
     res.json(sectors);
+  }
+
+  @httpGet("/index/:index/percent-above-sma")
+  public async percentAbovesSMA(
+    @request() req: Request,
+    @response() res: Response,
+    @requestParam("index") index: MajorStockIndex,
+    @queryParam("startDate") startDate: string,
+    @queryParam("period") period: string,
+    @queryParam("endDate") endDate: string
+  ) {
+    const start = startDate ? moment(startDate) : new Date(2014, 1, 1);
+    const end = endDate ? moment(endDate) : new Date();
+
+    const startMillis = start.valueOf();
+    const endMillis = end.valueOf();
+    const percentLine = await this.overviewSvc.getPercentAboveSMALine(
+      index,
+      period,
+      startMillis,
+      endMillis
+    );
+    res.json(percentLine);
   }
 }

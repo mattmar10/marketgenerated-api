@@ -18,20 +18,26 @@ import {
   DailySectorsOverview,
   IndexDailyOverview,
   IndexDailyOverviewPriceReturns,
+  PercentAboveSMALine,
+  PercentAboveMAPoint,
 } from "../../controllers/overview/overview-responses";
 import { Ticker } from "../../MarketGeneratedTypes";
 import { calculateMedian } from "../../utils/math_utils";
 import { filterCandlesPast52Weeks } from "../../indicators/indicator-utils";
 import {
+  MajorStockIndex,
   StockIndexConstituentList,
   isStockIndexConstituentList,
 } from "../stock-index/stock-index-types";
 import { StockIndexService } from "../stock-index/stock-index-service";
-import {
-  FMPHistorical,
-  FMPHistoricalArray,
-} from "../financial_modeling_prep_types";
+import { FMPHistoricalArray } from "../financial_modeling_prep_types";
 import { dateSringToMillisSinceEpochInET } from "../../utils/epoch_utils";
+import { DataError } from "../data_error";
+import e = require("express");
+import {
+  calculateSMA,
+  isMovingAverageError,
+} from "../../indicators/moving-average";
 
 export type OverviewServiceError = string;
 
@@ -453,5 +459,110 @@ export class OverviewService {
     }
 
     return { sectors: mapped };
+  }
+
+  public async getPercentAboveSMALine(
+    index: MajorStockIndex = "SP500",
+    period: string,
+    startDateInMillis: number,
+    endDateInMillis: number
+  ): Promise<PercentAboveSMALine | DataError> {
+    console.log("calculating percent above 50sma");
+    const parsedPeriod = parseInt(period, 10);
+    const sAndPP = await this.stockIndexSvc.getConstituents(index);
+
+    if (!isStockIndexConstituentList(sAndPP)) {
+      return {
+        errorMessage: "Unable to calculate percent above 50sma",
+      };
+    }
+
+    type SMADataPoint = {
+      symbol: string;
+      date: number;
+      dateString: string;
+      close: number;
+      smaValue: number;
+      percentFromSMA: number;
+    };
+
+    let allDataPoints: SMADataPoint[] = [];
+
+    for (const constituent of sAndPP) {
+      const candles: Candle[] = this.cacheSvc.getCandles(constituent.symbol);
+      const filtered = candles.filter(
+        (c) => c.date >= startDateInMillis && c.date <= endDateInMillis
+      );
+
+      const sorted = [...filtered].sort((a, b) => {
+        if (a.date > b.date) {
+          return 1;
+        } else if (a.date < b.date) {
+          return -1;
+        }
+        return 0;
+      });
+
+      const fiftySMA = calculateSMA(sorted, parsedPeriod);
+
+      if (isMovingAverageError(fiftySMA)) {
+        console.log("Not enough candles to calculate SMA");
+        continue;
+      }
+
+      for (const t of fiftySMA.timeseries) {
+        const c = candles.find((c) => c.dateStr === t.time);
+
+        if (!c || !c.dateStr) {
+          console.log("unexpected error");
+          continue;
+        }
+        const percentAwayFromSMA = ((c.close - t.value) / t.value) * 100;
+
+        const dataPoint: SMADataPoint = {
+          symbol: constituent.symbol,
+          date: c.date,
+          dateString: c.dateStr!,
+          close: c.close,
+          percentFromSMA: percentAwayFromSMA,
+          smaValue: t.value,
+        };
+
+        allDataPoints.push(dataPoint);
+      }
+    }
+
+    const groupedByDate: { [dateString: string]: SMADataPoint[] } =
+      allDataPoints.reduce((result, dataPoint) => {
+        const dateKey = dataPoint.dateString;
+
+        if (!result[dateKey]) {
+          result[dateKey] = [];
+        }
+
+        result[dateKey].push(dataPoint);
+
+        return result;
+      }, {} as { [dateString: string]: SMADataPoint[] });
+
+    const percentAboveSMAArray: PercentAboveMAPoint[] = Object.entries(
+      groupedByDate
+    ).map(([dateString, dataPoints]) => {
+      const totalDataPoints = dataPoints.length;
+      const aboveSMADataPoints = dataPoints.filter(
+        (dp) => dp.percentFromSMA > 0
+      ).length;
+
+      const percentAboveSMA = (aboveSMADataPoints / totalDataPoints) * 100 || 0;
+
+      return {
+        dateStr: dateString,
+        percentAboveMA: percentAboveSMA,
+      };
+    });
+
+    return {
+      timeSeries: percentAboveSMAArray,
+    };
   }
 }
