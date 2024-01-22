@@ -1,4 +1,5 @@
 import { Candle } from "../modles/candle";
+import { LinePoint } from "./linep-point-types";
 
 export type MovingAverageType = "SMA" | "EMA";
 
@@ -54,13 +55,37 @@ export function sma(
   }
 }
 
-export interface MovingAverageLinePoint {
-  time: string;
-  value: number;
+export function smaSeries(period: number, candles: Candle[]): LinePoint[] {
+  const result = new Array<LinePoint>(candles.length);
+  let sum = 0;
+
+  for (let i = 0; i < candles.length; i++) {
+    sum += candles[i].close;
+
+    if (i >= period) {
+      sum -= candles[i - period].close;
+
+      const point: LinePoint = {
+        time: candles[i].dateStr!,
+        value: sum / period,
+      };
+
+      result[i] = point;
+    } else {
+      const point: LinePoint = {
+        time: candles[i].dateStr!,
+        value: sum / (i + 1),
+      };
+      result[i] = point;
+    }
+  }
+
+  return result;
 }
+
 export interface MovingAverageLine {
   period: number;
-  timeseries: MovingAverageLinePoint[];
+  timeseries: LinePoint[];
 }
 
 export function calculateSMA(

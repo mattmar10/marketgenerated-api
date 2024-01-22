@@ -10,6 +10,8 @@ import {
 } from "inversify-express-utils";
 import { ScreenerService } from "../../services/screener/screener-service";
 import TYPES from "../../types";
+import { ZodError, z } from "zod";
+import { BollingerBandsScreenerResult } from "../../services/screener/screener-types";
 
 @controller("/screener")
 export class ScreenerController {
@@ -127,5 +129,62 @@ export class ScreenerController {
     const results = this.screenerSvc.mgScoreLeaders(minClosePrice, count);
 
     return results;
+  }
+
+  @httpGet("/bollinger-bands/lower-breach")
+  public bbBandsLowerBreach(
+    @request() req: Request,
+    @response() res: Response,
+    @queryParam("period") periodStr: string,
+    @queryParam("multiplier") multiplierStr: string,
+    @queryParam("minClosePrice") minClosePriceStr: string,
+    @queryParam("lookback") lookbackStr: string
+  ) {
+    const queryParamsSchema = z.object({
+      period: z.string().refine((val) => !isNaN(parseFloat(val)), {
+        message: "Period must be a valid number.",
+      }),
+      multiplier: z.string().refine((val) => !isNaN(parseFloat(val)), {
+        message: "Multiplier must be a valid number.",
+      }),
+      minClosePrice: z.string().refine((val) => !isNaN(parseFloat(val)), {
+        message: "MinClosePrice must be a valid number.",
+      }),
+      lookback: z.string().refine((val) => !isNaN(parseInt(val)), {
+        message: "Lookback must be a valid integer.",
+      }),
+    });
+
+    try {
+      // Parse and validate query parameters
+      const { period, multiplier, minClosePrice, lookback } =
+        queryParamsSchema.parse({
+          period: periodStr,
+          multiplier: multiplierStr,
+          minClosePrice: minClosePriceStr,
+          lookback: lookbackStr,
+        });
+
+      const results: BollingerBandsScreenerResult[] =
+        this.screenerSvc.bollingerBandsLowerBreach(
+          parseInt(period),
+          parseFloat(multiplier),
+          parseFloat(minClosePrice),
+          parseInt(lookback)
+        );
+
+      return results;
+    } catch (error) {
+      if (error instanceof ZodError) {
+        // Handle validation errors
+        res.status(400).send({
+          error: "Validation failed",
+          details: error.errors,
+        });
+      } else {
+        // Handle other types of errors
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    }
   }
 }

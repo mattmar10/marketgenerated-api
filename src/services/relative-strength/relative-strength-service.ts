@@ -27,7 +27,6 @@ import {
 } from "./relative-strength-types";
 import { getRelativeStrengthLine } from "../../indicators/relative-strength";
 import {
-  calculateLinearRegression,
   calculateLinearRegressionFromNumbers,
   isLinearRegressionResult,
 } from "../../indicators/linear-regression";

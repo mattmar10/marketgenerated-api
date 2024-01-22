@@ -26,6 +26,12 @@ export type ScreenerResult = {
   resultDateTime: string;
 };
 
+export type BollingerBandsScreenerResult = ScreenerResult & {
+  upperBand: number;
+  midBand: number;
+  lowerBand: number;
+};
+
 export type GapUpOnVolumeScreenerResult = ScreenerResult & {
   gapUpPercent: number;
 };

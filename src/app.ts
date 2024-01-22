@@ -10,6 +10,7 @@ import { SymbolService } from "./services/symbol/symbol_service";
 import { OverviewService } from "./services/overview/overview-service";
 
 import "./controllers/daily/daily-controller";
+import "./controllers/indicators/indicators-controller";
 import "./controllers/overview/overview-controller";
 import "./controllers/health-controller";
 import "./controllers/symbol/symbol-controller";
@@ -25,6 +26,7 @@ import { RelativeStrengthService } from "./services/relative-strength/relative-s
 import { StockIndexService } from "./services/stock-index/stock-index-service";
 import { LevelsService } from "./services/levels/levels-service";
 import { FundamentalRelativeStrengthService } from "./services/fundamental-relative-strength/funamental-relative-strength-service";
+import { IndicatorsService } from "./services/indicator/indicator-service";
 
 // Load environment variables from .env file
 (async () => {
@@ -97,6 +99,11 @@ import { FundamentalRelativeStrengthService } from "./services/fundamental-relat
     await dailyCacheService.initializeCache();
   }
   console.timeEnd("Daily Cache Service Initialization");
+
+  container
+    .bind<IndicatorsService>(TYPES.IndicatorsService)
+    .to(IndicatorsService)
+    .inSingletonScope();
 
   container
     .bind<LevelsService>(TYPES.LevelsService)

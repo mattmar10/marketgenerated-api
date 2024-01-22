@@ -1,5 +1,6 @@
 const TYPES = {
   DailyCacheService: Symbol.for("com.marketgenerated.api.DailyCacheSvc"),
+  IndicatorsService: Symbol.for("com.marketgenerated.api.IndicatorsService"),
   LevelsService: Symbol.for("com.marketgenerated.api.LevelsService"),
   OverviewService: Symbol.for("com.marketgenerated.api.OverviewService"),
   PriceHistoryService: Symbol.for("com.marketgenerated.api.PriceHistorySvc"),

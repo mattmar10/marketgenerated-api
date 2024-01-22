@@ -29,11 +29,10 @@ import {
 } from "../../indicators/moving-average";
 import { RelativeStrengthService } from "../relative-strength/relative-strength-service";
 import { SymbolService } from "../symbol/symbol_service";
-import { calculateMean } from "../../utils/math_utils";
-import { getRelativeStrengthLine } from "../../indicators/relative-strength";
 
 import { isRelativeStrengthError } from "../relative-strength/relative-strength-types";
 import {
+  BollingerBandsScreenerResult,
   GapUpOnVolumeScreenerResult,
   ScreenerResult,
   TrendTemplateResult,
@@ -41,6 +40,10 @@ import {
 } from "./screener-types";
 import { FundamentalRelativeStrengthService } from "../fundamental-relative-strength/funamental-relative-strength-service";
 import { FMPSymbolProfileData } from "../financial_modeling_prep_types";
+import {
+  bollingerBands,
+  isBollingerBandsResult,
+} from "../../indicators/bollinger-bands";
 
 export interface TrendTemplateError {
   symbol: Ticker;
@@ -307,6 +310,97 @@ export class ScreenerService {
 
       return Right(ttResult);
     }
+  }
+
+  public bollingerBandsLowerBreach(
+    smaPeriod: number = 20,
+    standardDeviation: number = 2,
+    minClosePrice: number = 10,
+    lookBack: number = 1
+  ): BollingerBandsScreenerResult[] {
+    console.log("Calculating Bollinger Band Breach");
+
+    const etfs = this.symbolSvc.getEtfs();
+    const stocks = this.symbolSvc.getStocks();
+
+    const filteredResults: BollingerBandsScreenerResult[] = [];
+
+    for (const symbolData of [...stocks, ...etfs]) {
+      const symbol = symbolData.Symbol;
+      const candles = this.cacheSvc.getCandles(symbol);
+
+      if (!candles || candles.length === 0) {
+        continue;
+      }
+
+      const fiftyTwoWeekCandles = filterCandlesPast52Weeks(candles);
+
+      if (
+        fiftyTwoWeekCandles[fiftyTwoWeekCandles.length - 1].close < 7 ||
+        fiftyTwoWeekCandles.length < 200
+      ) {
+        console.error(`Missing data for ${symbolData.Symbol}`);
+        continue;
+      }
+
+      const bbbands = bollingerBands(
+        fiftyTwoWeekCandles,
+        smaPeriod,
+        standardDeviation
+      );
+
+      if (isBollingerBandsResult(bbbands)) {
+        let breach = false;
+        for (let i = 1; i <= lookBack; i++) {
+          const candle = fiftyTwoWeekCandles[fiftyTwoWeekCandles.length - i];
+          const bbPoint = bbbands.timeseries[bbbands.timeseries.length - i];
+
+          if (
+            candle.open < bbPoint.lowerBand ||
+            candle.close < bbPoint.lowerBand
+          ) {
+            breach = true;
+          }
+        }
+
+        if (breach) {
+          const closes = fiftyTwoWeekCandles.map((c) => c.close);
+          const twoHundredSMASeq = smaSeq(200, closes);
+
+          if (isMovingAverageError(twoHundredSMASeq)) {
+            continue;
+          }
+
+          const linearReg200 = calculateLinearRegressionFromNumbers(
+            twoHundredSMASeq,
+            40
+          );
+
+          if (!isLinearRegressionResult(linearReg200)) {
+            continue;
+          }
+
+          if (linearReg200.slope > 0) {
+            const result = this.buildScreenerResult(symbolData, minClosePrice);
+            const lastpoint = bbbands.timeseries[bbbands.timeseries.length - 1];
+            match(
+              result,
+              (errorString) => console.error(errorString),
+              (data) =>
+                filteredResults.push({
+                  ...data,
+                  ...{
+                    lowerBand: lastpoint.lowerBand,
+                    upperBand: lastpoint.upperBand,
+                    midBand: lastpoint.sma,
+                  },
+                })
+            );
+          }
+        }
+      }
+    }
+    return filteredResults;
   }
 
   public emaCrossWithVolume(
