@@ -9,9 +9,11 @@
         "sourceMap": true,
         "skipLibCheck": true,
         "strictNullChecks": true,
-        "target": "es2020",
+        "target": "ESNext",
         "module": "commonjs",
         "forceConsistentCasingInFileNames": true,
+        "allowJs": true,
+        "esModuleInterop": true,
         "typeRoots": [
             "node_modules/@types"
         ],

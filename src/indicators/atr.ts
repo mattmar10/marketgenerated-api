@@ -1,6 +1,6 @@
 import { Candle } from "../modles/candle";
 import { LinePoint } from "./linep-point-types";
-import { SMA } from "trading-signals";
+import { SMA } from "../lib/trading-signals/dist/SMA/SMA";
 
 /*
  * TR = Max((High - Low), (High - Closing), (Closing - Low))
@@ -13,7 +13,7 @@ export interface AtrResult {
 }
 
 export function atr(candles: Candle[], period: number): AtrResult {
-  // const sma: SMA = new SMA(period);
+  const sma: SMA = new SMA(period);
 
   const timeseries: LinePoint[] = [];
   const trueRanges: LinePoint[] = [];

@@ -11,7 +11,7 @@ import {
 } from "inversify-express-utils";
 import TYPES from "../../types";
 import { DailyCacheService } from "../../services/daily_cache_service";
-import * as moment from "moment";
+import moment from "moment";
 import { Candle } from "../../modles/candle";
 import { formatDateFromMillisecondsToEST } from "../../utils/epoch_utils";
 import { DailyReturn, DailyReturns } from "./daily-responses";
