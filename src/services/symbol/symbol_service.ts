@@ -76,23 +76,6 @@ export interface EtfHoldingInfo {
 export class SymbolService {
   private stocks: FMPSymbolProfileData[];
   private etfs: FMPSymbolProfileData[];
-  private allSymbols: FMPSymbolProfileData[];
-
-  private diaHoldings: EtfHoldingInfo[];
-  private qqqHoldings: EtfHoldingInfo[];
-  private spyHoldings: EtfHoldingInfo[];
-
-  private stocksURL =
-    "https://marketgenerated.s3.amazonaws.com/nasdaq-stocks.json";
-
-  private etfsURL = "https://marketgenerated.s3.amazonaws.com/nasdaq-etfs.json";
-
-  private dowURL =
-    "https://marketgenerated.s3.amazonaws.com/etf-holdings/DIA.csv";
-  private spyURL =
-    "https://marketgenerated.s3.amazonaws.com/etf-holdings/SPY.csv";
-  private qqqURL =
-    "https://marketgenerated.s3.amazonaws.com/etf-holdings/QQQ.csv";
 
   private FINANCIAL_MODELING_PREP_URL =
     "https://financialmodelingprep.com/api/v3";
@@ -101,9 +84,6 @@ export class SymbolService {
   constructor() {
     this.stocks = [];
     this.etfs = [];
-    this.diaHoldings = [];
-    this.qqqHoldings = [];
-    this.spyHoldings = [];
   }
 
   public getStocks(): FMPSymbolProfileData[] {
@@ -114,60 +94,16 @@ export class SymbolService {
     return this.etfs;
   }
 
-  public getDIAHoldings(): EtfHoldingInfo[] {
-    return this.diaHoldings;
-  }
-
-  public getSPYHoldings(): EtfHoldingInfo[] {
-    return this.spyHoldings;
-  }
-
-  public getQQQHoldings(): EtfHoldingInfo[] {
-    return this.qqqHoldings;
-  }
-
-  private async fetchEtfHoldingInfo(url: string): Promise<EtfHoldingInfo[]> {
-    const response = await axios.get(url);
-    const csvData = await response.data;
-
-    // Drop the header line.
-    const lines = csvData.split("\n").slice(1);
-
-    // Parse the lines into an array of EtfHoldingInfo objects.
-    const etfHoldingInfos = lines.map((line: string) => {
-      const [etf, ticker, name, weight] = line.split(",");
-
-      return {
-        etf,
-        ticker,
-        name,
-        weight: parseFloat(weight),
-      };
-    });
-
-    return etfHoldingInfos;
-  }
-
   public async initialize(): Promise<void> {
-    const stocksResponse = axios.get(this.stocksURL);
-    const etfsResponse = axios.get(this.etfsURL);
-
-    const profileData = SymbolService.fetchSymbolProfileData();
-
     try {
-      const all = await Promise.all([
-        stocksResponse,
-        etfsResponse,
-        profileData,
-      ]);
+      const profileData = await SymbolService.fetchSymbolProfileData();
 
-      const parsedProfileData = all[2].filter(
-        (pd) => pd.VolAvg > 50000 && pd.Price > 7
+      const parsedProfileData = profileData.filter(
+        (pd) => pd.VolAvg > 50000 && pd.Price > 5
       );
 
       console.log(`Discovered ${parsedProfileData.length} symbols`);
 
-      this.allSymbols = parsedProfileData;
       this.stocks = parsedProfileData.filter((pd) => !pd.isEtf && !pd.isFund);
 
       console.log(`Discovered ${this.stocks.length} stocks`);
@@ -175,28 +111,6 @@ export class SymbolService {
       console.log(`Discovered ${this.etfs.length} etfs`);
     } catch (err) {
       console.error(`cannot fetch universe of symbols`, err);
-      process.exit(1);
-    }
-
-    //now try to fetch etf holdings
-    try {
-      console.log("Fetching ETF Constituents");
-      const dowHoldings = this.fetchEtfHoldingInfo(this.dowURL);
-      const qqqHoldings = this.fetchEtfHoldingInfo(this.qqqURL);
-      const spyHoldings = this.fetchEtfHoldingInfo(this.spyURL);
-
-      const [dow, qqq, spy] = await Promise.all([
-        dowHoldings,
-        qqqHoldings,
-        spyHoldings,
-      ]);
-
-      this.diaHoldings = dow;
-      this.qqqHoldings = qqq;
-      this.spyHoldings = spy;
-      console.log("Completed fetching ETF Constituents");
-    } catch (err) {
-      console.error(`cannot fetch etf holdings`, err);
       process.exit(1);
     }
   }

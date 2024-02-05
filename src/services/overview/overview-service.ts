@@ -241,23 +241,6 @@ export class OverviewService {
     return (tail.close - head.close) / head.close;
   }
 
-  public getOverviewReturns() {
-    const dowHoldings = this.symbolSvc.getDIAHoldings();
-    const qqqHoldings = this.symbolSvc.getQQQHoldings();
-    const spyHoldings = this.symbolSvc.getSPYHoldings();
-
-    const dowOverview: ETFDailyOverview = this.getOverview("DIA", dowHoldings);
-    const qqqOverview: ETFDailyOverview = this.getOverview("QQQ", qqqHoldings);
-    const spyOverview: ETFDailyOverview = this.getOverview("SPY", spyHoldings);
-
-    const returnsOverview: ETFOverviewPriceReturns = {
-      returns: [dowOverview, spyOverview, qqqOverview],
-      lastCloseDate: spyOverview.lastCandle.date,
-    };
-
-    return returnsOverview;
-  }
-
   public async getIndexOverviewReturns(): Promise<
     IndexDailyOverviewPriceReturns | OverviewServiceError
   > {

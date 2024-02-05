@@ -56,3 +56,10 @@ export function dateSringToMillisSinceEpochInET(dateString: string): number {
   startOfDay.setMilliseconds(0);
   return startOfDay.getTime();
 }
+
+export const getDateNMonthsAgo = (n: number): Date => {
+  const currentDate = new Date(); // Get current date
+  const newDate = new Date(currentDate); // Create a new date object to avoid modifying the original
+  newDate.setMonth(currentDate.getMonth() - n); // Subtract n months
+  return newDate;
+};

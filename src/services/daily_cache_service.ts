@@ -168,7 +168,6 @@ export class DailyCacheService {
           .replace(".gz", "")
           .trim();
         const data = await this.getObjectContentFromS3(bucketName, k);
-        //console.log(`parsing candles for ${k}`);
 
         const candlesFromS3 = this.tryParseCandlesStringS3(JSON.parse(data));
 

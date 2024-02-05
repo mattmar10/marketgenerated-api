@@ -12,12 +12,14 @@ import { OverviewService } from "./services/overview/overview-service";
 import "./controllers/daily/daily-controller";
 import "./controllers/overview/overview-controller";
 import "./controllers/health-controller";
+import "./controllers/indicators/indicators-controller";
 import "./controllers/symbol/symbol-controller";
 import "./controllers/relative-strength/relative-strength-controller";
 import "./controllers/fundamental-relative-strength/fundamental-relative-strength-controller";
 import "./controllers/search/search-controller";
 import "./controllers/screener/screener-controller";
 import "./controllers/weekly/weekly-controller";
+import "./controllers/scans/scans-controller";
 
 import { SearchService } from "./services/search/search_service";
 import { ScreenerService } from "./services/screener/screener-service";
@@ -25,6 +27,10 @@ import { RelativeStrengthService } from "./services/relative-strength/relative-s
 import { StockIndexService } from "./services/stock-index/stock-index-service";
 import { LevelsService } from "./services/levels/levels-service";
 import { FundamentalRelativeStrengthService } from "./services/fundamental-relative-strength/funamental-relative-strength-service";
+import { IndicatorsService } from "./services/indicator/indicator-service";
+import { Client } from "pg";
+import { ScanRepository } from "./repositories/scan/scan-repository";
+import { ScanService } from "./services/scan/scan-service";
 
 // Load environment variables from .env file
 (async () => {
@@ -38,6 +44,32 @@ import { FundamentalRelativeStrengthService } from "./services/fundamental-relat
     ? process.env.USE_LOCAL_CACHE === "true"
     : false;
   const localCachePath = process.env.LOCAL_CACHE_PATH;
+
+  const PG_DB_HOST = process.env.MG_DB_HOST;
+  const PG_DB_DATABASE = process.env.MG_DB_DATABASE;
+  const PG_DB_USER = process.env.MG_DB_USER;
+  const PG_DB_PASSWORD = process.env.MG_DB_PASSWORD;
+
+  const dbConfig = {
+    user: PG_DB_USER,
+    password: PG_DB_PASSWORD,
+    database: PG_DB_DATABASE,
+    host: PG_DB_HOST,
+    port: 5432, // Default PostgreSQL port
+  };
+
+  if (!PG_DB_DATABASE || !PG_DB_HOST || !PG_DB_PASSWORD || !PG_DB_USER) {
+    console.error("Missing required environment variables for Postgres");
+    process.exit(1);
+  }
+
+  const pgClient = new Client(dbConfig);
+  await pgClient.connect();
+
+  if (!process.env.SCAN_FOLDER || !process.env.SCAN_BUCKET) {
+    console.error("Missing required environment variables for scans");
+    process.exit(1);
+  }
 
   if (!accessKey || !secretAccessKey) {
     console.error("Missing required environment variables for AWS");
@@ -64,6 +96,7 @@ import { FundamentalRelativeStrengthService } from "./services/fundamental-relat
   const container = new Container();
 
   container.bind<S3Client>(TYPES.S3Client).toConstantValue(client);
+  container.bind<Client>(TYPES.PGClient).toConstantValue(pgClient);
 
   // create server
   const server = new InversifyExpressServer(container);
@@ -118,6 +151,7 @@ import { FundamentalRelativeStrengthService } from "./services/fundamental-relat
   );
 
   relativeStrenghService.initializeRelativeStrengthData();
+  relativeStrenghService.initializeRelativeStrengthsBySlopeData();
 
   container
     .bind<SearchService>(TYPES.SearchService)
@@ -149,6 +183,25 @@ import { FundamentalRelativeStrengthService } from "./services/fundamental-relat
     .bind<ScreenerService>(TYPES.ScreenerService)
     .to(ScreenerService)
     .inSingletonScope();
+
+  container
+    .bind<ScanRepository>(TYPES.ScanRepository)
+    .to(ScanRepository)
+    .inSingletonScope();
+
+  container
+    .bind<ScanService>(TYPES.ScanService)
+    .to(ScanService)
+    .inSingletonScope();
+
+  container
+    .bind<IndicatorsService>(TYPES.IndicatorService)
+    .to(IndicatorsService)
+    .inSingletonScope();
+
+  const scanService = container.get<ScanService>(TYPES.ScanService);
+  scanService.initialize();
+
   server.setConfig((app) => {
     app.use(
       bodyParser.urlencoded({

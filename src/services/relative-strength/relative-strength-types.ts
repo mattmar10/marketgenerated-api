@@ -1,3 +1,4 @@
+import { NumberOfAZs } from "aws-sdk/clients/opensearch";
 import { Ticker } from "../../MarketGeneratedTypes";
 
 export type RelativeStrengthError = string;
@@ -8,11 +9,8 @@ export interface ReturnData {
   oneYearReturns: number;
   yearToDateReturns: number;
   sixMonthReturns: number;
-  nineMonthReturns: number;
-  fiveMonthReturns: number;
   threeMonthReturns: number;
   oneMonthReturns: number;
-  twoWeekReturns: number;
   oneWeekReturns: number;
   oneDayReturns: number;
 }
@@ -28,12 +26,9 @@ export interface RelativeStrength {
 export const RelativeStrengthTimePeriodTypes = [
   "1Y",
   "YTD",
-  "9M",
   "6M",
-  "5M",
   "3M",
   "1M",
-  "2W",
   "1W",
   "1D",
 ] as const;
@@ -114,4 +109,18 @@ export function isRelativeStrengthError(
   data: RelativeStrengthsForSymbolStats | RelativeStrengthError
 ): data is RelativeStrengthError {
   return typeof data === "string";
+}
+
+export type RelativeStrengthPoint = {
+  date: number;
+  dateString: string;
+  rsRatio: number;
+};
+
+export interface RelativeStrengthsFromSlopeAggregate {
+  oneMonth: number;
+  threeMonth: number;
+  sixMonth: number;
+  oneYear: number;
+  composite: number;
 }
