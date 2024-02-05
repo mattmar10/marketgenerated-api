@@ -1,10 +1,18 @@
 import { inject, injectable } from "inversify";
 import { DailyCacheService } from "../daily_cache_service";
 import TYPES from "../../types";
-import { Ticker, isRight } from "../../MarketGeneratedTypes";
+import {
+  Either,
+  Left,
+  Right,
+  Ticker,
+  isLeft,
+  isRight,
+} from "../../MarketGeneratedTypes";
 import { SymbolService } from "../symbol/symbol_service";
 import {
   calculatePercentageReturn,
+  filterCandlesMapToPastMonths,
   filterCandlesPast52Weeks,
   filterCandlesPastMonths,
   filterCandlesPastWeeks,
@@ -18,10 +26,12 @@ import {
   RelativeStrengthLineStats,
   RelativeStrengthPerformers,
   RelativeStrengthPerformersForPeriod,
+  RelativeStrengthPoint,
   RelativeStrengthTimePeriod,
   RelativeStrengthTimePeriodTypes,
   RelativeStrengthsForSymbol,
   RelativeStrengthsForSymbolStats,
+  RelativeStrengthsFromSlopeAggregate,
   ReturnData,
   isRelativeStrengthsForSymbol,
 } from "./relative-strength-types";
@@ -36,6 +46,10 @@ import {
   isMovingAverageError,
   sma,
 } from "../../indicators/moving-average";
+import { DataError } from "../data_error";
+import { sortMapByValue } from "../../utils/basic_utils";
+import { getDateNMonthsAgo } from "../../utils/epoch_utils";
+import { int } from "aws-sdk/clients/datapipeline";
 
 @injectable()
 export class RelativeStrengthService {
@@ -50,6 +64,16 @@ export class RelativeStrengthService {
   private etfRelativeStrengthsMap: Map<
     RelativeStrengthTimePeriod,
     RelativeStrength[]
+  > = new Map();
+
+  private etfRelativeStrengthsFromSlopeMap: Map<
+    Ticker,
+    RelativeStrengthsFromSlopeAggregate
+  > = new Map();
+
+  private stockRelativeStrengthsFromSlopeMap: Map<
+    Ticker,
+    RelativeStrengthsFromSlopeAggregate
   > = new Map();
 
   private stocksRSForSymbols: RelativeStrengthsForSymbol[] = [];
@@ -68,11 +92,8 @@ export class RelativeStrengthService {
     const filtered = filterCandlesPast52Weeks(candles);
     const yearToDate = filterCandlesYearToDate(candles);
     const sixMonthsAgo = filterCandlesPastMonths(filtered, 6);
-    const nineMonthsAgo = filterCandlesPastMonths(filtered, 9);
-    const fiveMonthsAgo = filterCandlesPastMonths(filtered, 5);
     const threeMonthsAgo = filterCandlesPastMonths(filtered, 3);
     const oneMonthsAgo = filterCandlesPastMonths(filtered, 1);
-    const twoWeekAgo = filterCandlesPastWeeks(filtered, 2);
     const oneWeekAgo = filterCandlesPastWeeks(filtered, 1);
     const oneDayAgo = filtered.slice(-2);
 
@@ -82,24 +103,18 @@ export class RelativeStrengthService {
 
     const oneYearReturns = calculatePercentageReturn(filtered);
     const yearToDateReturns = calculatePercentageReturn(yearToDate);
-    const nineMonthReturns = calculatePercentageReturn(nineMonthsAgo);
     const sixMonthReturns = calculatePercentageReturn(sixMonthsAgo);
-    const fiveMonthReturns = calculatePercentageReturn(fiveMonthsAgo);
     const threeMonthReturns = calculatePercentageReturn(threeMonthsAgo);
     const oneMonthReturns = calculatePercentageReturn(oneMonthsAgo);
-    const twoWeekReturns = calculatePercentageReturn(twoWeekAgo);
     const oneWeekReturns = calculatePercentageReturn(oneWeekAgo);
     const oneDayReturns = calculatePercentageReturn(oneDayAgo);
 
     if (
       isIndicatorError(oneYearReturns) ||
       isIndicatorError(yearToDateReturns) ||
-      isIndicatorError(nineMonthReturns) ||
       isIndicatorError(sixMonthReturns) ||
-      isIndicatorError(fiveMonthReturns) ||
       isIndicatorError(threeMonthReturns) ||
       isIndicatorError(oneMonthReturns) ||
-      isIndicatorError(twoWeekReturns) ||
       isIndicatorError(oneWeekReturns) ||
       isIndicatorError(oneDayReturns)
     ) {
@@ -114,22 +129,18 @@ export class RelativeStrengthService {
         yearToDateReturns: isIndicatorError(yearToDateReturns)
           ? 0
           : yearToDateReturns,
-        nineMonthReturns: isIndicatorError(nineMonthReturns)
-          ? 0
-          : nineMonthReturns,
+
         sixMonthReturns: isIndicatorError(sixMonthReturns)
           ? 0
           : sixMonthReturns,
-        fiveMonthReturns: isIndicatorError(fiveMonthReturns)
-          ? 0
-          : fiveMonthReturns,
+
         threeMonthReturns: isIndicatorError(threeMonthReturns)
           ? 0
           : threeMonthReturns,
         oneMonthReturns: isIndicatorError(oneMonthReturns)
           ? 0
           : oneMonthReturns,
-        twoWeekReturns: isIndicatorError(twoWeekReturns) ? 0 : twoWeekReturns,
+
         oneWeekReturns: isIndicatorError(oneWeekReturns) ? 0 : oneWeekReturns,
         oneDayReturns: isIndicatorError(oneDayReturns) ? 0 : oneDayReturns,
       };
@@ -141,18 +152,153 @@ export class RelativeStrengthService {
         name: name,
         oneYearReturns: oneYearReturns,
         yearToDateReturns: yearToDateReturns,
-        nineMonthReturns: nineMonthReturns,
         sixMonthReturns: sixMonthReturns,
-        fiveMonthReturns: fiveMonthReturns,
         threeMonthReturns: threeMonthReturns,
         oneMonthReturns: oneMonthReturns,
-        twoWeekReturns: twoWeekReturns,
         oneWeekReturns: oneWeekReturns,
         oneDayReturns: oneDayReturns,
       };
 
       return returnData;
     }
+  }
+
+  public initializeRelativeStrengthsBySlopeData() {
+    const etfs = this.symbolSvc.getEtfs();
+    const stocks = this.symbolSvc.getStocks();
+
+    const universeOfStockKeys = stocks.map((s) => s.Symbol);
+    const universeOfEtfKeys = etfs.map((e) => e.Symbol);
+
+    type RelativeStrengthsFromSlope = {
+      stocks: Map<Ticker, number>;
+      etfs: Map<Ticker, number>;
+    };
+
+    const calculateRSFromSlopeForMonthsBack = (monthsBack: int) => {
+      const startDate = getDateNMonthsAgo(monthsBack);
+      const filterFn = (candle: Candle) => candle.date >= startDate.getTime();
+
+      const stockCandles: Map<Ticker, Candle[]> = new Map();
+      const etfCandles: Map<Ticker, Candle[]> = new Map();
+
+      universeOfStockKeys.forEach((e) => {
+        const candles = this.cacheSvc.getCandlesWithFilter(e, filterFn);
+
+        if (candles && candles.length > 0) {
+          stockCandles.set(e, candles);
+        }
+      });
+      universeOfEtfKeys.forEach((e) => {
+        const candles = this.cacheSvc.getCandlesWithFilter(e, filterFn);
+        if (candles && candles.length > 0) {
+          etfCandles.set(e, candles);
+        }
+      });
+
+      const benchMarkCandles = this.cacheSvc.getCandlesWithFilter(
+        "SPY",
+        filterFn
+      );
+      const etfRelativeStrengths = this.calculateRelativeStrengthsByLineSlope(
+        etfCandles,
+        benchMarkCandles
+      );
+      const stockRelativeStrengths = this.calculateRelativeStrengthsByLineSlope(
+        stockCandles,
+        benchMarkCandles
+      );
+
+      if (isLeft(etfRelativeStrengths) || isLeft(stockRelativeStrengths)) {
+        console.error(
+          `Unable to calculate relative strengths for ${monthsBack} months`
+        );
+      } else {
+        const result: RelativeStrengthsFromSlope = {
+          stocks: stockRelativeStrengths.value,
+          etfs: etfRelativeStrengths.value,
+        };
+
+        return result;
+      }
+    };
+
+    console.log("Building RS Data from slopes");
+
+    const etfRelativeStrengthsFromSlopeMap: Map<
+      RelativeStrengthTimePeriod,
+      Map<Ticker, number>
+    > = new Map();
+
+    const stockRelativeStrengthsFromSlopeMap: Map<
+      RelativeStrengthTimePeriod,
+      Map<Ticker, number>
+    > = new Map();
+
+    const oneMonth = calculateRSFromSlopeForMonthsBack(1);
+    const threeMonth = calculateRSFromSlopeForMonthsBack(3);
+    const sixMonth = calculateRSFromSlopeForMonthsBack(6);
+    const twelveMonth = calculateRSFromSlopeForMonthsBack(12);
+
+    if (!oneMonth || !threeMonth || !sixMonth || !twelveMonth) {
+      throw Error("Cound not calculate relative strength from slopes.");
+    }
+
+    etfRelativeStrengthsFromSlopeMap.set("1M", oneMonth.etfs);
+    stockRelativeStrengthsFromSlopeMap.set("1M", oneMonth.stocks);
+
+    etfRelativeStrengthsFromSlopeMap.set("3M", threeMonth.etfs);
+    stockRelativeStrengthsFromSlopeMap.set("3M", threeMonth.stocks);
+
+    etfRelativeStrengthsFromSlopeMap.set("6M", sixMonth.etfs);
+    stockRelativeStrengthsFromSlopeMap.set("6M", sixMonth.stocks);
+
+    etfRelativeStrengthsFromSlopeMap.set("1Y", twelveMonth.etfs);
+    stockRelativeStrengthsFromSlopeMap.set("1Y", twelveMonth.stocks);
+
+    oneMonth.stocks.forEach((oneMonthScore, ticker) => {
+      const threeMonthScore = threeMonth?.stocks.get(ticker) || 0;
+      const sixMonthScore = sixMonth?.stocks.get(ticker) || 0;
+      const oneYearScore = twelveMonth?.stocks.get(ticker) || 0;
+
+      const aggregate: RelativeStrengthsFromSlopeAggregate = {
+        oneMonth: oneMonthScore,
+        threeMonth: threeMonthScore,
+        sixMonth: sixMonthScore,
+        oneYear: oneYearScore,
+        composite: Number(
+          (
+            0.2 * oneYearScore +
+            0.2 * sixMonthScore +
+            0.3 * threeMonthScore +
+            0.3 * oneMonthScore
+          ).toFixed(2)
+        ),
+      };
+      this.stockRelativeStrengthsFromSlopeMap.set(ticker, aggregate);
+    });
+
+    oneMonth.etfs.forEach((oneMonthScore, ticker) => {
+      const threeMonthScore = threeMonth?.stocks.get(ticker) || 0;
+      const sixMonthScore = sixMonth?.stocks.get(ticker) || 0;
+      const oneYearScore = twelveMonth?.stocks.get(ticker) || 0;
+
+      const aggregate: RelativeStrengthsFromSlopeAggregate = {
+        oneMonth: oneMonthScore,
+        threeMonth: threeMonthScore,
+        sixMonth: sixMonthScore,
+        oneYear: oneYearScore,
+        composite: Number(
+          (
+            0.2 * oneYearScore +
+            0.2 * sixMonthScore +
+            0.3 * threeMonthScore +
+            0.3 * oneMonthScore
+          ).toFixed(2)
+        ),
+      };
+      this.etfRelativeStrengthsFromSlopeMap.set(ticker, aggregate);
+    });
   }
 
   public initializeRelativeStrengthData() {
@@ -168,6 +314,8 @@ export class RelativeStrengthService {
     );
     const stockReturns = [];
     const etfReturns = [];
+
+    console.log("building RS Data");
 
     for (const k of allKeys) {
       if (universeOfStockKeys.includes(k)) {
@@ -221,18 +369,12 @@ export class RelativeStrengthService {
               return s.oneYearReturns;
             case "YTD":
               return s.yearToDateReturns;
-            case "9M":
-              return s.nineMonthReturns;
             case "6M":
               return s.sixMonthReturns;
-            case "5M":
-              return s.fiveMonthReturns;
             case "3M":
               return s.threeMonthReturns;
             case "1M":
               return s.oneMonthReturns;
-            case "2W":
-              return s.twoWeekReturns;
             case "1W":
               return s.oneWeekReturns;
             case "1D":
@@ -255,18 +397,12 @@ export class RelativeStrengthService {
               return e.oneYearReturns;
             case "YTD":
               return e.yearToDateReturns;
-            case "9M":
-              return e.sixMonthReturns;
             case "6M":
               return e.sixMonthReturns;
             case "3M":
               return e.threeMonthReturns;
-            case "5M":
-              return e.fiveMonthReturns;
             case "1M":
               return e.oneMonthReturns;
-            case "2W":
-              return e.twoWeekReturns;
             case "1W":
               return e.oneWeekReturns;
             case "1D":
@@ -546,12 +682,9 @@ export class RelativeStrengthService {
       number
     > = {
       "1Y": 0.2,
-      "9M": 0.2,
       "6M": 0.2,
-      "5M": 0,
-      "3M": 0.4,
-      "1M": 0,
-      "2W": 0,
+      "3M": 0.3,
+      "1M": 0.3,
       "1W": 0,
       "1D": 0,
       YTD: 0,
@@ -768,5 +901,110 @@ export class RelativeStrengthService {
     };
 
     return result;
+  }
+
+  private calculateRelativeStrengthsByLineSlope(
+    dataset: Map<Ticker, Candle[]>,
+    benchmark: Candle[]
+  ): Either<DataError, Map<Ticker, number>> {
+    if (!benchmark || benchmark.length == 0) {
+      return Left({
+        errorMessage: "Cannot calculate relative strength without a benchmark",
+      });
+    }
+
+    const benchmarkCloses: Map<string, number> = new Map();
+    for (let i = 0; i < benchmark.length; i++) {
+      benchmarkCloses.set(benchmark[i].dateStr!, benchmark[i].close);
+    }
+
+    //get a relative strength line
+    const rsLineMap: Map<Ticker, RelativeStrengthPoint[]> = new Map();
+
+    dataset.forEach((candles, ticker) => {
+      const relativeStrengthLine: RelativeStrengthPoint[] = [];
+      candles.sort((a, b) => a.date - b.date);
+
+      for (let j = 0; j < candles.length; j++) {
+        const benchMarkClose = benchmarkCloses.get(candles[j].dateStr!);
+        if (!benchMarkClose) {
+          console.error(
+            `No benchmark close found for ${candles[j].dateStr} - ticker ${ticker}`
+          );
+        } else {
+          const sliced = candles.slice(0, j + 1);
+          const benchmarks: number[] = [];
+          const slicedSanitized: number[] = [];
+          sliced.forEach((s) => {
+            const bench = benchmark.find((b) => b.dateStr === s.dateStr);
+            if (bench) {
+              benchmarks.push(bench.close - bench.open);
+              slicedSanitized.push(s.close - s.open);
+            }
+          });
+
+          const point: RelativeStrengthPoint = {
+            date: candles[j].date,
+            dateString: candles[j].dateStr!,
+            rsRatio: candles[j].close / benchMarkClose,
+          };
+          relativeStrengthLine.push(point);
+        }
+      }
+      if (relativeStrengthLine.length > 0) {
+        rsLineMap.set(ticker, relativeStrengthLine);
+      }
+    });
+
+    //now take the linear regression of the lines and map the slope
+    const linearRegressionMap: Map<Ticker, number> = new Map();
+    rsLineMap.forEach((rsLinePoints, ticker) => {
+      const rsLinePointValues = rsLinePoints.map((point) => point.rsRatio);
+      const linearReg = calculateLinearRegressionFromNumbers(
+        rsLinePointValues,
+        rsLinePointValues.length
+      );
+
+      if (isLinearRegressionResult(linearReg)) {
+        linearRegressionMap.set(ticker, linearReg.slope);
+      } else {
+        console.error(
+          `Unable to calculate the linear regression for ${ticker} - ${linearReg}`
+        );
+      }
+    });
+
+    // Sort the map by slope values
+    const sortedMap = sortMapByValue(linearRegressionMap);
+
+    // Assign ranks to the sorted tickers
+    const rankedMap: Map<Ticker, number> = new Map(
+      [...sortedMap].map(([ticker], index) => [ticker, index + 1])
+    );
+
+    const totalTickers = rankedMap.size;
+
+    function calculatePercentileRank(rank: number, total: number): number {
+      return (rank / total) * 100;
+    }
+
+    // Calculate percentile ranks for each ticker
+    const percentileRanks: Map<Ticker, number> = new Map();
+    rankedMap.forEach((rank, ticker) => {
+      const percentileRank = calculatePercentileRank(rank, totalTickers);
+      percentileRanks.set(ticker, Number(percentileRank.toFixed(2)));
+    });
+
+    return Right(percentileRanks);
+  }
+
+  public getRelativeStrengthFromSlope(
+    ticker: Ticker
+  ): RelativeStrengthsFromSlopeAggregate | undefined {
+    const stockRS = this.stockRelativeStrengthsFromSlopeMap.get(ticker);
+
+    return stockRS
+      ? stockRS
+      : this.etfRelativeStrengthsFromSlopeMap.get(ticker);
   }
 }

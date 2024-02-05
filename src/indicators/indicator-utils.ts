@@ -1,3 +1,4 @@
+import { Ticker } from "../MarketGeneratedTypes";
 import { Candle } from "../modles/candle";
 
 export type IndicatorError = string;
@@ -46,6 +47,20 @@ export function filterCandlesYearToDate(candles: Candle[]): Candle[] {
     return candle.date >= startOfYear.getTime() && candle.date <= now.getTime();
   });
 }
+
+export const filterCandlesMapToPastMonths = (
+  dataSet: Map<Ticker, Candle[]>,
+  months: number
+): Map<Ticker, Candle[]> => {
+  const pastNMonths: Map<string, Candle[]> = new Map();
+  dataSet.forEach((data, ticker) => {
+    const filtered = filterCandlesPastMonths(data, months);
+
+    pastNMonths.set(ticker, filtered);
+  });
+
+  return pastNMonths;
+};
 
 export function filterCandlesPastMonths(
   candles: Candle[],

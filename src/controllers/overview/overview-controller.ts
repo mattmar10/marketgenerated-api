@@ -22,14 +22,14 @@ export class OverviewController {
     @inject(TYPES.OverviewService) private overviewSvc: OverviewService
   ) {}
 
-  @httpGet("/returns")
+  /*@httpGet("/returns")
   public returns(@request() req: Request, @response() res: Response) {
     const etfHoldingReturns: ETFOverviewPriceReturns =
       this.overviewSvc.getOverviewReturns();
 
     res.json(etfHoldingReturns);
   }
-
+*/
   @httpGet("/index-returns")
   public async indexReturns(
     @request() req: Request,
