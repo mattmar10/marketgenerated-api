@@ -35,4 +35,18 @@ export class ScansController {
       return scans;
     }
   }
+
+  @httpGet("/results")
+  public async getHistoricalScanResults(
+    @request() req: Request,
+    @response() res: Response,
+    @queryParam("ticker") ticker: string
+  ) {
+    const scans = await this.scanService.getScanResultsForTicker(ticker);
+    if (scans === undefined) {
+      res.status(404).send(`not found`);
+    } else {
+      return scans;
+    }
+  }
 }

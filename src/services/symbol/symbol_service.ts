@@ -22,6 +22,8 @@ import {
   QuoteArraySchema,
   SymbolFundamentalChangeStats,
   SymbolFundamentalChangesStats,
+  SymbolFundamentalStats,
+  SymbolFundamentalsStats,
 } from "./symbol-types";
 export type SymbolServiceError = string;
 
@@ -122,6 +124,7 @@ export class SymbolService {
     const url = `${FMP_BASE_URL}/v4/profile/all?apikey=${financialModelingPrepKey}`;
 
     try {
+      console.log("Fetching all profiles from FMP");
       const response = await axios.get(url);
 
       // The CSV data will be available in response.data
@@ -318,6 +321,60 @@ export class SymbolService {
       return Promise.resolve(
         Left<SymbolServiceError>(
           `Unable to get income statement data for symbol ${symbol}`
+        )
+      );
+    }
+  }
+
+  public async getFundamentalStatsForSymbol(
+    symbol: Ticker,
+    period: PeriodType = "quarter",
+    limit: number = 4
+  ): Promise<Either<SymbolServiceError, SymbolFundamentalsStats>> {
+    try {
+      console.log(`fetching fundamental quarter stats for ${symbol}`);
+      const url = `${
+        this.FINANCIAL_MODELING_PREP_URL
+      }/income-statement/${symbol}?period=${period}&limit=${limit + 1}&apikey=${
+        this.financialModelingPrepKey
+      }`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FmpIncomeStatementListSchema.safeParse(data);
+
+      if (parsed.success) {
+        const incomes = parsed.data.reverse();
+        const result: SymbolFundamentalStats[] = [];
+
+        for (let i = 1; i < incomes.length; i++) {
+          const current = incomes[i];
+
+          result.push({
+            date: current.date,
+            revenue: current.revenue,
+            profit: current.grossProfit,
+            eps: current.eps,
+          });
+        }
+
+        const stats: SymbolFundamentalsStats = {
+          symbol: symbol,
+          stats: result,
+        };
+
+        return Right(stats);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing incompe statement data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get fundamental stats for symbol ${symbol}`
         )
       );
     }

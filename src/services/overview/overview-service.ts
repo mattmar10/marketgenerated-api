@@ -20,6 +20,7 @@ import {
   IndexDailyOverviewPriceReturns,
   PercentAboveSMALine,
   PercentAboveMAPoint,
+  AdvanceDeclineOverview,
 } from "../../controllers/overview/overview-responses";
 import { Ticker } from "../../MarketGeneratedTypes";
 import { calculateMedian } from "../../utils/math_utils";
@@ -32,7 +33,7 @@ import {
 import { StockIndexService } from "../stock-index/stock-index-service";
 import { FMPHistoricalArray } from "../financial_modeling_prep_types";
 import { dateSringToMillisSinceEpochInET } from "../../utils/epoch_utils";
-import { DataError } from "../data_error";
+import { DataError, isDataError } from "../data_error";
 import e = require("express");
 import {
   calculateSMA,
@@ -46,12 +47,18 @@ export class OverviewService {
   private dailyStockMovers: DailyMover[];
   private dailyETFMovers: DailyMover[];
 
+  private percentAboveSMAMap: Map<
+    MajorStockIndex,
+    Map<number, PercentAboveSMALine>
+  > = new Map();
+
   constructor(
     @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService,
     @inject(TYPES.SymbolService) private symbolSvc: SymbolService,
     @inject(TYPES.StockIndexService) private stockIndexSvc: StockIndexService
   ) {
     this.buildMovers();
+    this.buildPercentAboveSMAMap();
   }
 
   private buildMovers() {
@@ -130,6 +137,96 @@ export class OverviewService {
 
     this.dailyStockMovers = stockMovers;
     this.dailyETFMovers = etfMovers;
+  }
+
+  private async buildPercentAboveSMAMap() {
+    // Get the current date
+    const currentDate = new Date();
+
+    // Calculate the date 2 years and one day ago
+    const twoYearsOneDayAgo = new Date(
+      currentDate.getFullYear() - 2,
+      currentDate.getMonth(),
+      currentDate.getDate() - 1, // Subtract 1 day to go one day ago
+      currentDate.getHours(),
+      currentDate.getMinutes(),
+      currentDate.getSeconds(),
+      currentDate.getMilliseconds()
+    );
+
+    // Get the time in milliseconds
+    const startMillis = twoYearsOneDayAgo.getTime();
+    const endMillis = currentDate.getTime();
+    const sp500PercentAbove50 = this.getPercentAboveSMALine(
+      "SP500",
+      "50",
+      startMillis,
+      endMillis
+    );
+    const sp500PercentAbove200 = this.getPercentAboveSMALine(
+      "SP500",
+      "200",
+      startMillis,
+      endMillis
+    );
+
+    const ns100PercentAbove50 = this.getPercentAboveSMALine(
+      "NS100",
+      "50",
+      startMillis,
+      endMillis
+    );
+    const ns100PercentAbove200 = this.getPercentAboveSMALine(
+      "NS100",
+      "200",
+      startMillis,
+      endMillis
+    );
+
+    const [sp50, sp200, ns50, ns200] = await Promise.all([
+      sp500PercentAbove50,
+      sp500PercentAbove200,
+      ns100PercentAbove50,
+      ns100PercentAbove200,
+    ]);
+
+    const sp500Map: Map<number, PercentAboveSMALine> = new Map();
+    const ns100Map: Map<number, PercentAboveSMALine> = new Map();
+
+    if (!isDataError(sp50)) {
+      sp500Map.set(50, sp50);
+    } else {
+      console.error(
+        "unable to calculate percent of S&P constituents above 50SMA"
+      );
+    }
+
+    if (!isDataError(sp200)) {
+      sp500Map.set(200, sp200);
+    } else {
+      console.error(
+        "unable to calculate percent of S&P constituents above 200SMA"
+      );
+    }
+
+    if (!isDataError(ns50)) {
+      ns100Map.set(50, ns50);
+    } else {
+      console.error(
+        "unable to calculate percent of NS100 constituents above 50SMA"
+      );
+    }
+
+    if (!isDataError(ns200)) {
+      ns100Map.set(200, ns200);
+    } else {
+      console.error(
+        "unable to calculate percent of NS100 constituents above 200SMA"
+      );
+    }
+
+    this.percentAboveSMAMap.set("SP500", sp500Map);
+    this.percentAboveSMAMap.set("NS100", ns100Map);
   }
 
   private getOverview(etfTicker: Ticker, etfHoldings: EtfHoldingInfo[]) {

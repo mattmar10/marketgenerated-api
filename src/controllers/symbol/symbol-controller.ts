@@ -21,6 +21,7 @@ import {
   PeriodType,
   Quote,
   SymbolFundamentalChangesStats,
+  SymbolFundamentalsStats,
   SymbolProfile,
 } from "../../services/symbol/symbol-types";
 import { FMPProfile } from "../../services/financial_modeling_prep_types";
@@ -176,6 +177,66 @@ export class SymbolController {
 
       match(
         incomeStatementResp,
+        (error) => {
+          console.error(
+            `Error getting income statement for ${ticker} ${error}`
+          );
+          res.status(500).json({ error: error });
+        },
+        (news) => {
+          res.json(news);
+        }
+      );
+    }
+  }
+
+  @httpGet("/:ticker/fundamental-stats")
+  public async fundamentalStats(
+    @request() req: Request,
+    @response() res: Response,
+    @next() next: NextFunction,
+    @requestParam("ticker") ticker: string,
+    @queryParam("period") period: string,
+    @queryParam("limit") limit: string
+  ) {
+    const trimmed = ticker.trim().toUpperCase();
+
+    const validateQueryParams = (period: string, limit: string): boolean => {
+      const periodSchema = z.enum(["quarter", "year"]);
+      const limitSchema = z.string().regex(/^\d+$/).min(1).max(10);
+
+      const parsedPeriod = periodSchema.safeParse(period);
+      const parsedLimit = limitSchema.safeParse(limit);
+
+      if (!parsedPeriod.success) {
+        return false;
+      }
+
+      if (!parsedLimit.success) {
+        return false;
+      }
+
+      return true;
+    };
+
+    if (
+      !trimmed ||
+      trimmed.length == 0 ||
+      !validateQueryParams(period, limit)
+    ) {
+      res.status(400).send();
+    } else {
+      const fundamentalsResp: Either<
+        SymbolServiceError,
+        SymbolFundamentalsStats
+      > = await this.symbolService.getFundamentalStatsForSymbol(
+        ticker,
+        period as PeriodType,
+        Number(limit)
+      );
+
+      match(
+        fundamentalsResp,
         (error) => {
           console.error(
             `Error getting income statement for ${ticker} ${error}`

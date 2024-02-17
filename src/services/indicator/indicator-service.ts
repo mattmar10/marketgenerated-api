@@ -108,10 +108,20 @@ export class IndicatorsService {
       const betaForWindow = getBeta(tickerCandles, baseline);
 
       if (isRight(betaForWindow)) {
+        const candle = tickerCandles[tickerCandles.length - 1];
+        const benchmark = baseline[baseline.length - 1];
+        const rsRatio = candle.close / benchmark.close;
+
+        const adjClose =
+          candle.close + candle.close * betaForWindow.value.alpha;
+        const adjRatio = adjClose / benchmark.close;
+
         const betaPoint: BetaLinePoint = {
           time: baseline[baseline.length - 1].dateStr!,
           beta: betaForWindow.value.beta,
           alpha: betaForWindow.value.alpha,
+          rsLineRatio: Number(rsRatio.toFixed(2)),
+          adustedRsLineRatio: Number(adjRatio.toFixed(2)),
         };
 
         timeSeries.push(betaPoint);

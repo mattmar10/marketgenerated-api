@@ -36,6 +36,7 @@ export type ScanResponseRow = {
   ticker: Ticker;
   name: string;
   price: number;
+  adrP: number;
   percentChange: number;
   marketCap: number;
   volume: number;
@@ -58,3 +59,10 @@ export type ScanResultsWithRows = {
   etfs: ScanResponseRow[];
   stocks: ScanResponseRow[];
 };
+
+export interface ScanMatchResponse {
+  ticker: Ticker;
+  date: Date;
+  scanName: string;
+  scanId: string;
+}
