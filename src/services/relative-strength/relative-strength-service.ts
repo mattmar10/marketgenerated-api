@@ -268,10 +268,10 @@ export class RelativeStrengthService {
         oneYear: oneYearScore,
         composite: Number(
           (
-            0.2 * oneYearScore +
+            0.1 * oneYearScore +
             0.2 * sixMonthScore +
-            0.3 * threeMonthScore +
-            0.3 * oneMonthScore
+            0.35 * threeMonthScore +
+            0.35 * oneMonthScore
           ).toFixed(2)
         ),
       };

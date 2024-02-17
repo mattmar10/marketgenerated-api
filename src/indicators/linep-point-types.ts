@@ -7,4 +7,6 @@ export interface BetaLinePoint {
   time: string;
   beta: number;
   alpha: number;
+  rsLineRatio: number;
+  adustedRsLineRatio: number;
 }

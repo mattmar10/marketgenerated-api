@@ -5,6 +5,7 @@ const TYPES = {
   OverviewService: Symbol.for("com.marketgenerated.api.OverviewService"),
   PriceHistoryService: Symbol.for("com.marketgenerated.api.PriceHistorySvc"),
   PGClient: Symbol.for("com.marketgenerated.api.pg.client"),
+  PGPool: Symbol.for("com.marketgenerated.api.pg.pool"),
   RelativeStrengthService: Symbol.for(
     "com.markgetgenerated.api.RelativeStrengthService"
   ),

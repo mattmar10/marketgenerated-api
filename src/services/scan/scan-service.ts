@@ -13,17 +13,20 @@ import { pipeline } from "stream/promises";
 import { DailyCacheService } from "../daily_cache_service";
 import {
   ScanIdentifier,
+  ScanMatchResponse,
   ScanResponseRow,
   ScanResultsWithRows,
   isScanResults,
 } from "./scan-types";
-import { Ticker } from "../../MarketGeneratedTypes";
+import { Ticker, isRight } from "../../MarketGeneratedTypes";
 import { getDateNMonthsAgo } from "../../utils/epoch_utils";
 import { Candle } from "../../modles/candle";
 import { SymbolService } from "../symbol/symbol_service";
 import { FMPSymbolProfileData } from "../financial_modeling_prep_types";
 import { RelativeStrengthService } from "../relative-strength/relative-strength-service";
 import { PredefinedScanResponse } from "../../controllers/scans/scan-request-responses";
+import { adrPercent, isADRPercentError } from "../../indicators/adr-percent";
+import { date, map } from "zod";
 
 @injectable()
 export class ScanService {
@@ -52,6 +55,7 @@ export class ScanService {
 
     for (let i = 0; i < fromDB.length; i++) {
       const dbScan = fromDB[i];
+
       const latestResult = this.latestScanResults.find(
         (s) => s.scanId === dbScan.s3Identifier
       );
@@ -74,6 +78,22 @@ export class ScanService {
     }
 
     return toReturn;
+  }
+
+  public async getScanResultsForTicker(
+    ticker: Ticker
+  ): Promise<ScanMatchResponse[]> {
+    const fromDB = await this.repo.getScanResultsForTicker(ticker);
+
+    return fromDB.map((r) => {
+      const mapped = {
+        ticker: ticker,
+        date: r.date,
+        scanName: r.scanName,
+        scanId: r.scanId,
+      };
+      return mapped;
+    });
   }
 
   public getLatestScanResults(
@@ -182,7 +202,10 @@ export class ScanService {
       .slice(-41, -1)
       .reduce((sum, candle) => sum + candle.volume, 0);
 
-    const relativeVolume = (lastVolume / past40VolumeSum) * 100;
+    const averageVolumePast40Days = past40VolumeSum / 40;
+    const relativeVolume = (lastVolume / averageVolumePast40Days) * 100;
+
+    const adrP = adrPercent(candles, 20);
 
     const result: ScanResponseRow = {
       ticker: ticker,
@@ -190,6 +213,7 @@ export class ScanService {
       price: lastCandle.close,
       percentChange: Number(percentChange.toFixed(2)),
       marketCap: profile.MktCap,
+      adrP: !isADRPercentError(adrP) ? Number(adrP.toFixed(2)) : 0,
       volume: lastCandle.volume,
       rVolume: Number(relativeVolume.toFixed(2)),
       rsRankFromSlope:

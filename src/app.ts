@@ -28,7 +28,7 @@ import { StockIndexService } from "./services/stock-index/stock-index-service";
 import { LevelsService } from "./services/levels/levels-service";
 import { FundamentalRelativeStrengthService } from "./services/fundamental-relative-strength/funamental-relative-strength-service";
 import { IndicatorsService } from "./services/indicator/indicator-service";
-import { Client } from "pg";
+import { Client, Pool } from "pg";
 import { ScanRepository } from "./repositories/scan/scan-repository";
 import { ScanService } from "./services/scan/scan-service";
 
@@ -50,21 +50,31 @@ import { ScanService } from "./services/scan/scan-service";
   const PG_DB_USER = process.env.MG_DB_USER;
   const PG_DB_PASSWORD = process.env.MG_DB_PASSWORD;
 
-  const dbConfig = {
+  /*const dbConfig = {
     user: PG_DB_USER,
     password: PG_DB_PASSWORD,
     database: PG_DB_DATABASE,
     host: PG_DB_HOST,
     port: 5432, // Default PostgreSQL port
-  };
+  };*/
+
+  const pool = new Pool({
+    user: PG_DB_USER,
+    password: PG_DB_PASSWORD,
+    database: PG_DB_DATABASE,
+    host: PG_DB_HOST,
+    port: 5432,
+    max: 5, // Maximum number of clients in the pool
+    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  });
 
   if (!PG_DB_DATABASE || !PG_DB_HOST || !PG_DB_PASSWORD || !PG_DB_USER) {
     console.error("Missing required environment variables for Postgres");
     process.exit(1);
   }
 
-  const pgClient = new Client(dbConfig);
-  await pgClient.connect();
+  //const pgClient = new Client(dbConfig);
+  //await pgClient.connect();
 
   if (!process.env.SCAN_FOLDER || !process.env.SCAN_BUCKET) {
     console.error("Missing required environment variables for scans");
@@ -96,7 +106,9 @@ import { ScanService } from "./services/scan/scan-service";
   const container = new Container();
 
   container.bind<S3Client>(TYPES.S3Client).toConstantValue(client);
-  container.bind<Client>(TYPES.PGClient).toConstantValue(pgClient);
+  //container.bind<Client>(TYPES.PGClient).toConstantValue(pgClient);
+
+  container.bind<Pool>(TYPES.PGPool).toConstantValue(pool);
 
   // create server
   const server = new InversifyExpressServer(container);

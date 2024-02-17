@@ -62,9 +62,21 @@ export interface SymbolFundamentalChangeStats {
   incomeChangePercent: number;
 }
 
+export interface SymbolFundamentalStats {
+  date: string;
+  revenue: number;
+  profit: number;
+  eps: number;
+}
+
 export interface SymbolFundamentalChangesStats {
   symbol: string;
   stats: SymbolFundamentalChangeStats[];
+}
+
+export interface SymbolFundamentalsStats {
+  symbol: string;
+  stats: SymbolFundamentalStats[];
 }
 
 export const FmpIncomeStatementElementSchema = z.object({
