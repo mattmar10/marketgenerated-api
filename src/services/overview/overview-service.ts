@@ -21,6 +21,7 @@ import {
   PercentAboveSMALine,
   PercentAboveMAPoint,
   AdvanceDeclineOverview,
+  AdvanceDeclineDataPoint,
 } from "../../controllers/overview/overview-responses";
 import { Ticker } from "../../MarketGeneratedTypes";
 import { calculateMedian } from "../../utils/math_utils";
@@ -52,6 +53,9 @@ export class OverviewService {
     Map<number, PercentAboveSMALine>
   > = new Map();
 
+  private advanceDeclineMap: Map<MajorStockIndex, AdvanceDeclineOverview> =
+    new Map();
+
   constructor(
     @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService,
     @inject(TYPES.SymbolService) private symbolSvc: SymbolService,
@@ -59,6 +63,7 @@ export class OverviewService {
   ) {
     this.buildMovers();
     this.buildPercentAboveSMAMap();
+    this.buildAdvanceDeclineLineMap();
   }
 
   private buildMovers() {
@@ -139,8 +144,7 @@ export class OverviewService {
     this.dailyETFMovers = etfMovers;
   }
 
-  private async buildPercentAboveSMAMap() {
-    // Get the current date
+  private async buildAdvanceDeclineLineMap() {
     const currentDate = new Date();
 
     // Calculate the date 2 years and one day ago
@@ -156,6 +160,48 @@ export class OverviewService {
 
     // Get the time in milliseconds
     const startMillis = twoYearsOneDayAgo.getTime();
+    const endMillis = currentDate.getTime();
+
+    const [dowAdvanceDecline, nsAdvanceDecline, spAdvanceDecline] =
+      await Promise.all([
+        this.getAdvanceDeclineLine("DOW", startMillis, endMillis),
+        this.getAdvanceDeclineLine("NS100", startMillis, endMillis),
+        this.getAdvanceDeclineLine("SP500", startMillis, endMillis),
+      ]);
+
+    if (!isDataError(dowAdvanceDecline)) {
+      this.advanceDeclineMap.set("DOW", dowAdvanceDecline);
+    } else {
+      console.error("unable to calculate advance decline for dow");
+    }
+
+    if (!isDataError(nsAdvanceDecline)) {
+      this.advanceDeclineMap.set("NS100", nsAdvanceDecline);
+    } else {
+      console.error("unable to calculate advance decline for ns100");
+    }
+
+    if (!isDataError(spAdvanceDecline)) {
+      this.advanceDeclineMap.set("SP500", spAdvanceDecline);
+    } else {
+      console.error("unable to calculate advance decline for sp500");
+    }
+  }
+  private async buildPercentAboveSMAMap() {
+    const currentDate = new Date();
+
+    const threeYearsOneDayAgo = new Date(
+      currentDate.getFullYear() - 3,
+      currentDate.getMonth(),
+      currentDate.getDate() - 1, // Subtract 1 day to go one day ago
+      currentDate.getHours(),
+      currentDate.getMinutes(),
+      currentDate.getSeconds(),
+      currentDate.getMilliseconds()
+    );
+
+    // Get the time in milliseconds
+    const startMillis = threeYearsOneDayAgo.getTime();
     const endMillis = currentDate.getTime();
     const sp500PercentAbove50 = this.getPercentAboveSMALine(
       "SP500",
@@ -183,13 +229,29 @@ export class OverviewService {
       endMillis
     );
 
-    const [sp50, sp200, ns50, ns200] = await Promise.all([
+    const dowPercentAbove50 = this.getPercentAboveSMALine(
+      "DOW",
+      "50",
+      startMillis,
+      endMillis
+    );
+    const dowHistoryPercentAbove200 = this.getPercentAboveSMALine(
+      "DOW",
+      "200",
+      startMillis,
+      endMillis
+    );
+
+    const [sp50, sp200, ns50, ns200, dow50, dow200] = await Promise.all([
       sp500PercentAbove50,
       sp500PercentAbove200,
       ns100PercentAbove50,
       ns100PercentAbove200,
+      dowPercentAbove50,
+      dowHistoryPercentAbove200,
     ]);
 
+    const dowMap: Map<number, PercentAboveSMALine> = new Map();
     const sp500Map: Map<number, PercentAboveSMALine> = new Map();
     const ns100Map: Map<number, PercentAboveSMALine> = new Map();
 
@@ -225,6 +287,23 @@ export class OverviewService {
       );
     }
 
+    if (!isDataError(dow50)) {
+      dowMap.set(50, dow50);
+    } else {
+      console.error(
+        "unable to calculate percent of Dow constituents above 50SMA"
+      );
+    }
+
+    if (!isDataError(dow200)) {
+      dowMap.set(200, dow200);
+    } else {
+      console.error(
+        "unable to calculate percent of Dow constituents above 200SMA"
+      );
+    }
+
+    this.percentAboveSMAMap.set("DOW", dowMap);
     this.percentAboveSMAMap.set("SP500", sp500Map);
     this.percentAboveSMAMap.set("NS100", ns100Map);
   }
@@ -541,6 +620,13 @@ export class OverviewService {
     return { sectors: mapped };
   }
 
+  public getCachedPercentAboveSMALine(
+    index: MajorStockIndex,
+    period: number
+  ): PercentAboveSMALine | undefined {
+    return this.percentAboveSMAMap.get(index)?.get(period);
+  }
+
   public async getPercentAboveSMALine(
     index: MajorStockIndex = "SP500",
     period: string,
@@ -643,6 +729,69 @@ export class OverviewService {
 
     return {
       timeSeries: percentAboveSMAArray,
+    };
+  }
+
+  public getCachedAdvancedDeclineLine(index: MajorStockIndex) {
+    return this.advanceDeclineMap.get(index);
+  }
+
+  public async getAdvanceDeclineLine(
+    index: MajorStockIndex = "SP500",
+    startDateInMillis: number,
+    endDateInMillis: number
+  ): Promise<AdvanceDeclineOverview | DataError> {
+    const constituents = await this.stockIndexSvc.getConstituents(index);
+
+    if (!isStockIndexConstituentList(constituents)) {
+      return {
+        errorMessage: "Unable to calculate percent above 50sma",
+      };
+    }
+
+    const data: Map<string, number> = new Map();
+
+    for (const c of constituents) {
+      const candles: Candle[] = this.cacheSvc.getCandles(c.symbol);
+      const filtered = candles.filter(
+        (c) => c.date >= startDateInMillis && c.date <= endDateInMillis
+      );
+
+      const sorted = [...filtered].sort((a, b) => {
+        if (a.date > b.date) {
+          return 1;
+        } else if (a.date < b.date) {
+          return -1;
+        }
+        return 0;
+      });
+
+      for (const candle of sorted) {
+        const toAdd = candle.close > candle.open ? 1 : -1;
+        const count = data.get(candle.dateStr!);
+
+        if (count) {
+          data.set(candle.dateStr!, count + toAdd);
+        } else {
+          data.set(candle.dateStr!, toAdd);
+        }
+      }
+    }
+
+    // Calculate Advance Decline Line
+    const advanceDeclineLine: AdvanceDeclineDataPoint[] = [];
+    let cumulativeValue = 0;
+
+    for (const [date, value] of data.entries()) {
+      cumulativeValue += value;
+      advanceDeclineLine.push({
+        dateStr: date,
+        value: cumulativeValue,
+      });
+    }
+
+    return {
+      lineseries: advanceDeclineLine,
     };
   }
 }
