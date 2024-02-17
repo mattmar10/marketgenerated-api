@@ -65,21 +65,29 @@ export class OverviewController {
     @request() req: Request,
     @response() res: Response,
     @requestParam("index") index: MajorStockIndex,
-    @queryParam("startDate") startDate: string,
-    @queryParam("period") period: string,
-    @queryParam("endDate") endDate: string
+    //@queryParam("startDate") startDate: string,
+    @queryParam("period") period: string
+    //@queryParam("endDate") endDate: string
   ) {
-    const start = startDate ? moment(startDate) : new Date(2014, 1, 1);
-    const end = endDate ? moment(endDate) : new Date();
+    // const start = startDate ? moment(startDate) : new Date(2014, 1, 1);
+    //const end = endDate ? moment(endDate) : new Date();
 
-    const startMillis = start.valueOf();
-    const endMillis = end.valueOf();
-    const percentLine = await this.overviewSvc.getPercentAboveSMALine(
+    //const startMillis = start.valueOf();
+    //const endMillis = end.valueOf();
+    const percentLine = await this.overviewSvc.getCachedPercentAboveSMALine(
       index,
-      period,
-      startMillis,
-      endMillis
+      parseInt(period, 10)
     );
     res.json(percentLine);
+  }
+
+  @httpGet("/index/:index/advance-decline-line")
+  public async advanceDeclineLine(
+    @request() req: Request,
+    @response() res: Response,
+    @requestParam("index") index: MajorStockIndex
+  ) {
+    const adLine = await this.overviewSvc.getCachedAdvancedDeclineLine(index);
+    res.json(adLine);
   }
 }

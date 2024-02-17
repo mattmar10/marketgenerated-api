@@ -161,7 +161,7 @@ export class ScanService {
   private buildScanResultRow(ticker: Ticker): ScanResponseRow | undefined {
     const profile = this.profiles.find((p) => p.Symbol === ticker);
     if (!profile) {
-      console.error(`Could not find profile for ${ticker}`);
+      //console.error(`Could not find profile for ${ticker}`);
       return undefined;
     }
     const startDate = getDateNMonthsAgo(2);
