@@ -15,12 +15,8 @@ import {
 
 import { createGunzip } from "zlib";
 import { pipeline } from "stream/promises";
-import { DataError } from "./data_error";
-import {
-  zodS3CandleSchema,
-  zodS3CandlesSchema,
-  zodTiingoCandlesSchema,
-} from "./tiingo_types";
+import { DataError, isDataError } from "./data_error";
+import { zodTiingoCandlesSchema } from "./tiingo_types";
 
 import {
   addOneDay,
@@ -31,15 +27,14 @@ import {
 import axios from "axios";
 import { parseBooleanEnv } from "../utils/env_var_utils";
 import {
-  FMPHistorical,
-  FMPHistoricalArray,
+  FMPEarningsCalendar,
+  FMPEarningsCalendarSchema,
   FMPHistoricalArraySchema,
   FMPHistoricalResultSchema,
-  FMPHistoricalSchema,
-  FMPTradableSymbolArray,
-  FmpHistoricalResult,
+  isFMPEarningsCalendar,
 } from "./financial_modeling_prep_types";
 import Bottleneck from "bottleneck";
+import { symbol } from "zod";
 
 interface CacheEntry {
   symbol: Ticker;
@@ -63,9 +58,11 @@ export class DailyCacheService {
   private financialModelingPrepKey = process.env.FINANCIAL_MODELING_PREP_KEY;
   private fetchNewCandles: boolean;
   private candles: Map<Ticker, Candle[]>;
+  private earnings: Map<Ticker, FMPEarningsCalendar>;
 
   constructor(@inject(TYPES.S3Client) private s3Client: S3Client) {
     this.candles = new Map<Ticker, Candle[]>();
+    this.earnings = new Map<Ticker, FMPEarningsCalendar>();
     this.fetchNewCandles = parseBooleanEnv(
       process.env.CACHE_FETCH_NEW_CANDLES,
       false
@@ -149,6 +146,10 @@ export class DailyCacheService {
     }
   }
 
+  public getEarningsCalendar(ticker: Ticker): FMPEarningsCalendar | undefined {
+    return this.earnings.get(ticker);
+  }
+
   public getAllData(): Map<Ticker, Candle[]> {
     return this.candles;
   }
@@ -202,6 +203,43 @@ export class DailyCacheService {
           `Processed ${i + batchSize} of ${keys.length} keys (${percent.toFixed(
             2
           )}%)`
+        );
+      }
+    }
+
+    const processEarningsBatch = async (batchKeys: string[]): Promise<void> => {
+      batchKeys.forEach(async (k) => {
+        const symbol = k
+          .replace("marketdata-fmp-earnings/", "")
+          .replace(".gz", "")
+          .trim();
+        const data = await this.getObjectContentFromS3(bucketName, k);
+
+        const earningsCalendar = this.tryParseEarningsCalendar(
+          JSON.parse(data)
+        );
+        if (isFMPEarningsCalendar(earningsCalendar)) {
+          this.earnings.set(symbol, earningsCalendar);
+        }
+      });
+    };
+
+    const earningsKeys = (await this.listAllObjectKeys(bucketName)).filter(
+      (k) => k.endsWith(".gz") && k.includes("marketdata-fmp-earnings/")
+    );
+
+    const earningsCalendars: FMPEarningsCalendar[] = [];
+
+    for (let i = 0; i < earningsKeys.length; i += batchSize) {
+      const batchKeys = earningsKeys.slice(i, i + batchSize);
+      await processEarningsBatch(batchKeys);
+
+      const percent = ((i + batchSize) * 100) / earningsKeys.length;
+      if (earningsCalendars.length % 100 === 0) {
+        console.log(
+          `Processed ${i + batchSize} of earnings ${
+            keys.length
+          } keys (${percent.toFixed(2)}%)`
         );
       }
     }
@@ -298,6 +336,18 @@ export class DailyCacheService {
     } catch (err) {
       //console.log(err);
       return { errorMessage: `Unable to parse candles` };
+    }
+  }
+
+  private tryParseEarningsCalendar(
+    data: JSON
+  ): FMPEarningsCalendar | DataError {
+    try {
+      const earningsCalendar = FMPEarningsCalendarSchema.parse(data);
+      return earningsCalendar;
+    } catch (err) {
+      //console.log(err);
+      return { errorMessage: `Unable to parse earnings calendar` };
     }
   }
 

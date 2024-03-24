@@ -63,3 +63,10 @@ export const getDateNMonthsAgo = (n: number): Date => {
   newDate.setMonth(currentDate.getMonth() - n); // Subtract n months
   return newDate;
 };
+
+export const getDateNDaysAgo = (n: number): Date => {
+  const currentDate = new Date(); // Get current date
+  const newDate = new Date(currentDate); // Create a new date object to avoid modifying the original
+  newDate.setDate(currentDate.getDate() - n); // Subtract n days
+  return newDate;
+};

@@ -9,6 +9,8 @@ import {
   FMPProfileArraySchema,
   CandleListSchema,
   CandlesList,
+  FMPEarningsCalendarSchema,
+  FMPEarningsCalendar,
 } from "../financial_modeling_prep_types";
 
 import { Either, Left, Right, Ticker } from "../../MarketGeneratedTypes";
@@ -326,6 +328,37 @@ export class SymbolService {
     }
   }
 
+  public async getEarningsCalendarForSymbol(
+    symbol: Ticker,
+    limit: number = 10
+  ): Promise<Either<SymbolServiceError, FMPEarningsCalendar>> {
+    try {
+      console.log(`fetching earnings calendar for ${symbol}`);
+      const url = `${this.FINANCIAL_MODELING_PREP_URL}/historical/earning_calendar/${symbol}?limit=${limit}&apikey=${this.financialModelingPrepKey}`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      const parsed = FMPEarningsCalendarSchema.safeParse(data);
+
+      if (parsed.success) {
+        const earningsDates: FMPEarningsCalendar = parsed.data;
+
+        return Right(earningsDates);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing earnings  data for ${symbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get earnings calendar for symbol ${symbol}`
+        )
+      );
+    }
+  }
   public async getFundamentalStatsForSymbol(
     symbol: Ticker,
     period: PeriodType = "quarter",
@@ -380,16 +413,13 @@ export class SymbolService {
     }
   }
 
-  public async getFundamentalChangeStatsForSymbol(
-    symbol: Ticker,
-    period: PeriodType = "quarter",
-    limit: number = 4
-  ): Promise<Either<SymbolServiceError, SymbolFundamentalChangesStats>> {
+  getFundamentalChangeStatsForSymbol = async (
+    symbol: string,
+    period: PeriodType = "quarter"
+  ): Promise<Either<SymbolServiceError, SymbolFundamentalChangesStats>> => {
     try {
       console.log(`fetching fundamental quarter stats for ${symbol}`);
-      const url = `${
-        this.FINANCIAL_MODELING_PREP_URL
-      }/income-statement/${symbol}?period=${period}&limit=${limit + 1}&apikey=${
+      const url = `https://financialmodelingprep.com/api/v3/income-statement/${symbol}?period=${period}&limit=${12}&apikey=${
         this.financialModelingPrepKey
       }`;
 
@@ -398,43 +428,52 @@ export class SymbolService {
 
       const parsed = FmpIncomeStatementListSchema.safeParse(data);
 
-      if (parsed.success) {
-        const incomes = parsed.data.reverse();
+      if (parsed.success && parsed.data.length > 8) {
+        const incomes = parsed.data.slice(0, 4);
         const result: SymbolFundamentalChangeStats[] = [];
 
-        for (let i = 1; i < incomes.length; i++) {
+        for (let i = 0; i < incomes.length; i++) {
           const current = incomes[i];
-          const previous = incomes[i - 1];
-
-          const profitChangePercent = Number(
-            this.calculatePercentageChange(
-              current.grossProfit,
-              previous.grossProfit
-            ).toFixed(2)
-          );
-          const epsChangePercent = Number(
-            this.calculatePercentageChange(current.eps, previous.eps).toFixed(2)
-          );
-          const revenueChangePercent = Number(
-            this.calculatePercentageChange(
-              current.revenue,
-              previous.revenue
-            ).toFixed(2)
-          );
-          const incomeChangePercent = Number(
-            this.calculatePercentageChange(
-              current.netIncome,
-              previous.netIncome
-            ).toFixed(2)
+          const currentYear = parseInt(current.calendarYear);
+          const previous = parsed.data.find(
+            (i) =>
+              i.calendarYear === (currentYear - 1).toString() &&
+              i.period === current.period
           );
 
-          result.push({
-            date: current.date,
-            profitChangePercent,
-            epsChangePercent,
-            revenueChangePercent,
-            incomeChangePercent,
-          });
+          if (previous) {
+            const profitChangePercent = Number(
+              this.calculatePercentageChange(
+                current.grossProfit,
+                previous.grossProfit
+              ).toFixed(2)
+            );
+            const epsChangePercent = Number(
+              this.calculatePercentageChange(current.eps, previous.eps).toFixed(
+                2
+              )
+            );
+            const revenueChangePercent = Number(
+              this.calculatePercentageChange(
+                current.revenue,
+                previous.revenue
+              ).toFixed(2)
+            );
+            const incomeChangePercent = Number(
+              this.calculatePercentageChange(
+                current.netIncome,
+                previous.netIncome
+              ).toFixed(2)
+            );
+
+            result.push({
+              date: current.date,
+              profitChangePercent,
+              epsChangePercent,
+              revenueChangePercent,
+              incomeChangePercent,
+            });
+          }
         }
 
         const stats: SymbolFundamentalChangesStats = {
@@ -445,7 +484,7 @@ export class SymbolService {
         return Right(stats);
       } else {
         return Left<SymbolServiceError>(
-          `Error parsing incompe statement data for ${symbol}`
+          `Error parsing income statement data for ${symbol}`
         );
       }
     } catch (error) {
@@ -456,7 +495,7 @@ export class SymbolService {
         )
       );
     }
-  }
+  };
 
   private calculatePercentageChange(
     currentValue: number,

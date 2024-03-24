@@ -24,6 +24,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.370.0",
+    "@aws-sdk/client-secrets-manager": "^3.529.1",
+    "@aws-sdk/client-sqs": "^3.540.0",
     "aws-sdk": "^2.1417.0",
     "axios": "^1.4.0",
     "bottleneck": "^2.19.5",
@@ -32,6 +34,7 @@
     "inversify": "^6.0.1",
     "inversify-express-utils": "^6.4.3",
     "moment": "^2.29.4",
+    "node-cache": "^5.1.2",
     "papaparse": "^5.4.1",
     "pg": "^8.11.3",
     "reflect-metadata": "^0.1.13",

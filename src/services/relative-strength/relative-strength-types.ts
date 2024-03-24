@@ -1,5 +1,7 @@
 import { NumberOfAZs } from "aws-sdk/clients/opensearch";
 import { Ticker } from "../../MarketGeneratedTypes";
+import { RelatedItemEventIncludedData } from "aws-sdk/clients/connectcases";
+import { TableResponseRow } from "../response-types";
 
 export type RelativeStrengthError = string;
 
@@ -118,9 +120,16 @@ export type RelativeStrengthPoint = {
 };
 
 export interface RelativeStrengthsFromSlopeAggregate {
+  oneDay: number;
+  oneWeek: number;
   oneMonth: number;
   threeMonth: number;
   sixMonth: number;
   oneYear: number;
   composite: number;
+}
+
+export interface AvgIndustryGroupRelativeStrength {
+  industry: string;
+  avgRelativeStrengths: RelativeStrengthsFromSlopeAggregate;
 }

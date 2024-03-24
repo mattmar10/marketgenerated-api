@@ -445,7 +445,7 @@ export class OverviewService {
           open: h.open,
           high: h.high,
           low: h.low,
-          close: h.adjClose,
+          close: h.adjClose || h.close,
           volume: h.volume,
         };
         return c;

@@ -8,6 +8,7 @@ import {
   Ticker,
   isLeft,
   isRight,
+  match,
 } from "../../MarketGeneratedTypes";
 import { SymbolService } from "../symbol/symbol_service";
 import {
@@ -21,6 +22,7 @@ import {
 } from "../../indicators/indicator-utils";
 import { Candle } from "../../modles/candle";
 import {
+  AvgIndustryGroupRelativeStrength,
   RelativeStrength,
   RelativeStrengthError,
   RelativeStrengthLineStats,
@@ -48,13 +50,27 @@ import {
 } from "../../indicators/moving-average";
 import { DataError } from "../data_error";
 import { sortMapByValue } from "../../utils/basic_utils";
-import { getDateNMonthsAgo } from "../../utils/epoch_utils";
-import { int } from "aws-sdk/clients/datapipeline";
+import {
+  formatDateToEST,
+  getDateNDaysAgo,
+  getDateNMonthsAgo,
+} from "../../utils/epoch_utils";
+
+import { TableResponseRow } from "../response-types";
+import { FMPSymbolProfileData } from "../financial_modeling_prep_types";
+import {
+  adrPercent,
+  findMean,
+  isADRPercentError,
+} from "../../indicators/adr-percent";
+import { IndicatorsService } from "../indicator/indicator-service";
 
 @injectable()
 export class RelativeStrengthService {
   private stockReturns: ReturnData[];
   private etfReturns: ReturnData[];
+
+  readonly profiles: FMPSymbolProfileData[];
 
   private stockRelativeStrengthsMap: Map<
     RelativeStrengthTimePeriod,
@@ -76,13 +92,21 @@ export class RelativeStrengthService {
     RelativeStrengthsFromSlopeAggregate
   > = new Map();
 
+  private stockIndustryGroupRelativeStrengthsFromSlopeMap: Map<
+    string,
+    RelativeStrengthsFromSlopeAggregate[]
+  > = new Map();
+
   private stocksRSForSymbols: RelativeStrengthsForSymbol[] = [];
   private etfsRSForSymbols: RelativeStrengthsForSymbol[] = [];
 
   constructor(
     @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService,
-    @inject(TYPES.SymbolService) private symbolSvc: SymbolService
-  ) {}
+    @inject(TYPES.SymbolService) private symbolSvc: SymbolService,
+    @inject(TYPES.IndicatorService) private indicatorsService: IndicatorsService
+  ) {
+    this.profiles = [...symbolSvc.getStocks(), ...symbolSvc.getEtfs()];
+  }
 
   private buildReturnData(
     symbol: Ticker,
@@ -175,8 +199,7 @@ export class RelativeStrengthService {
       etfs: Map<Ticker, number>;
     };
 
-    const calculateRSFromSlopeForMonthsBack = (monthsBack: int) => {
-      const startDate = getDateNMonthsAgo(monthsBack);
+    const calculateRSFromSlopeForDaysBack = (startDate: Date) => {
       const filterFn = (candle: Candle) => candle.date >= startDate.getTime();
 
       const stockCandles: Map<Ticker, Candle[]> = new Map();
@@ -211,7 +234,7 @@ export class RelativeStrengthService {
 
       if (isLeft(etfRelativeStrengths) || isLeft(stockRelativeStrengths)) {
         console.error(
-          `Unable to calculate relative strengths for ${monthsBack} months`
+          `Unable to calculate relative strengths since ${startDate}`
         );
       } else {
         const result: RelativeStrengthsFromSlope = {
@@ -235,14 +258,32 @@ export class RelativeStrengthService {
       Map<Ticker, number>
     > = new Map();
 
-    const oneMonth = calculateRSFromSlopeForMonthsBack(1);
-    const threeMonth = calculateRSFromSlopeForMonthsBack(3);
-    const sixMonth = calculateRSFromSlopeForMonthsBack(6);
-    const twelveMonth = calculateRSFromSlopeForMonthsBack(12);
+    const oneDayBackString = this.cacheSvc.getCandles("SPY").slice(-3)[0]
+      .dateStr!;
 
-    if (!oneMonth || !threeMonth || !sixMonth || !twelveMonth) {
+    const oneDay = calculateRSFromSlopeForDaysBack(new Date(oneDayBackString));
+    const oneWeek = calculateRSFromSlopeForDaysBack(getDateNDaysAgo(7));
+    const oneMonth = calculateRSFromSlopeForDaysBack(getDateNMonthsAgo(1));
+    const threeMonth = calculateRSFromSlopeForDaysBack(getDateNMonthsAgo(3));
+    const sixMonth = calculateRSFromSlopeForDaysBack(getDateNMonthsAgo(6));
+    const twelveMonth = calculateRSFromSlopeForDaysBack(getDateNMonthsAgo(12));
+
+    if (
+      !oneDay ||
+      !oneWeek ||
+      !oneMonth ||
+      !threeMonth ||
+      !sixMonth ||
+      !twelveMonth
+    ) {
       throw Error("Cound not calculate relative strength from slopes.");
     }
+
+    etfRelativeStrengthsFromSlopeMap.set("1D", oneDay.etfs);
+    stockRelativeStrengthsFromSlopeMap.set("1D", oneDay.stocks);
+
+    etfRelativeStrengthsFromSlopeMap.set("1W", oneWeek.etfs);
+    stockRelativeStrengthsFromSlopeMap.set("1W", oneWeek.stocks);
 
     etfRelativeStrengthsFromSlopeMap.set("1M", oneMonth.etfs);
     stockRelativeStrengthsFromSlopeMap.set("1M", oneMonth.stocks);
@@ -257,11 +298,15 @@ export class RelativeStrengthService {
     stockRelativeStrengthsFromSlopeMap.set("1Y", twelveMonth.stocks);
 
     oneMonth.stocks.forEach((oneMonthScore, ticker) => {
+      const oneDayScore = oneDay?.stocks?.get(ticker) || 0;
+      const oneWeekScore = oneWeek?.stocks?.get(ticker) || 0;
       const threeMonthScore = threeMonth?.stocks.get(ticker) || 0;
       const sixMonthScore = sixMonth?.stocks.get(ticker) || 0;
       const oneYearScore = twelveMonth?.stocks.get(ticker) || 0;
 
       const aggregate: RelativeStrengthsFromSlopeAggregate = {
+        oneDay: oneDayScore,
+        oneWeek: oneWeekScore,
         oneMonth: oneMonthScore,
         threeMonth: threeMonthScore,
         sixMonth: sixMonthScore,
@@ -276,14 +321,37 @@ export class RelativeStrengthService {
         ),
       };
       this.stockRelativeStrengthsFromSlopeMap.set(ticker, aggregate);
+
+      const profile = stocks.find((s) => s.Symbol === ticker);
+      if (profile && profile.industry) {
+        const data = this.stockIndustryGroupRelativeStrengthsFromSlopeMap.get(
+          profile.industry
+        );
+
+        if (data) {
+          this.stockIndustryGroupRelativeStrengthsFromSlopeMap.set(
+            profile.industry,
+            [...data, aggregate]
+          );
+        } else {
+          this.stockIndustryGroupRelativeStrengthsFromSlopeMap.set(
+            profile.industry,
+            [aggregate]
+          );
+        }
+      }
     });
 
     oneMonth.etfs.forEach((oneMonthScore, ticker) => {
-      const threeMonthScore = threeMonth?.stocks.get(ticker) || 0;
-      const sixMonthScore = sixMonth?.stocks.get(ticker) || 0;
-      const oneYearScore = twelveMonth?.stocks.get(ticker) || 0;
+      const oneDayScore = oneDay?.etfs.get(ticker) || 0;
+      const oneWeekScore = oneMonth?.etfs.get(ticker) || 0;
+      const threeMonthScore = threeMonth?.etfs.get(ticker) || 0;
+      const sixMonthScore = sixMonth?.etfs.get(ticker) || 0;
+      const oneYearScore = twelveMonth?.etfs.get(ticker) || 0;
 
       const aggregate: RelativeStrengthsFromSlopeAggregate = {
+        oneDay: oneDayScore,
+        oneWeek: oneWeekScore,
         oneMonth: oneMonthScore,
         threeMonth: threeMonthScore,
         sixMonth: sixMonthScore,
@@ -292,8 +360,8 @@ export class RelativeStrengthService {
           (
             0.2 * oneYearScore +
             0.2 * sixMonthScore +
-            0.3 * threeMonthScore +
-            0.3 * oneMonthScore
+            0.25 * threeMonthScore +
+            0.35 * oneMonthScore
           ).toFixed(2)
         ),
       };
@@ -903,6 +971,224 @@ export class RelativeStrengthService {
     return result;
   }
 
+  public getRelativeStrengthLeadersForTimePeriodFromRSLine(
+    top: number = 100,
+    minimumRSRank: number = 80,
+    timePeriod: RelativeStrengthTimePeriod,
+    assetType: "stocks" | "etfs" = "stocks"
+  ): TableResponseRow[] {
+    function getTopNByRelativeStrength(
+      map: Map<Ticker, RelativeStrengthsFromSlopeAggregate>,
+      key: keyof RelativeStrengthsFromSlopeAggregate,
+      n: number
+    ): [Ticker, RelativeStrengthsFromSlopeAggregate][] {
+      // Convert map to array of entries
+      const entries = Array.from(map.entries());
+
+      const filteredEntries = entries.filter(
+        (entry) => entry[1][key] > minimumRSRank
+      );
+
+      // Sort entries based on the specified key in descending order
+      filteredEntries.sort((a, b) => b[1][key] - a[1][key]);
+
+      // Return top n entries
+      return filteredEntries.slice(0, n);
+    }
+
+    let key: keyof RelativeStrengthsFromSlopeAggregate = "composite";
+    if (timePeriod == "1D") {
+      key = "oneDay";
+    } else if (timePeriod == "1W") {
+      key = "oneWeek";
+    } else if (timePeriod == "1M") {
+      key = "oneMonth";
+    } else if (timePeriod == "3M") {
+      key = "threeMonth";
+    } else if (timePeriod == "6M") {
+      key = "sixMonth";
+    } else if (timePeriod == "1Y") {
+      key = "oneYear";
+    }
+
+    const filtered =
+      assetType == "stocks"
+        ? getTopNByRelativeStrength(
+            this.stockRelativeStrengthsFromSlopeMap,
+            key,
+            top
+          )
+        : getTopNByRelativeStrength(
+            this.etfRelativeStrengthsFromSlopeMap,
+            key,
+            top
+          );
+
+    const map = new Map(filtered);
+    const responseList: TableResponseRow[] = [];
+
+    map.forEach((value, key) => {
+      const resultRow = this.buildResultRow(key, value);
+      if (resultRow) {
+        responseList.push(resultRow);
+      }
+    });
+
+    return responseList;
+  }
+
+  private buildResultRow(
+    ticker: Ticker,
+    aggregate: RelativeStrengthsFromSlopeAggregate
+  ): TableResponseRow | undefined {
+    const profile = this.profiles.find((p) => p.Symbol === ticker);
+    if (!profile) {
+      //console.error(`Could not find profile for ${ticker}`);
+      return undefined;
+    }
+    const startDate = getDateNMonthsAgo(12);
+    const filterFn = (candle: Candle) => candle.date >= startDate.getTime();
+
+    const candles = this.cacheSvc.getCandlesWithFilter(ticker, filterFn);
+    candles.sort((a, b) => {
+      if (a.date > b.date) {
+        return 1;
+      } else if (a.date < b.date) {
+        return -1;
+      }
+      return 0;
+    });
+
+    if (
+      candles.length < 2 ||
+      !candles[candles.length - 1].close ||
+      !candles[candles.length - 2].close ||
+      !candles[candles.length - 1].volume
+    ) {
+      console.error(
+        `cannot build scan row from ${ticker} - missing close or volume data`
+      );
+      return undefined;
+    }
+
+    const lastCandle = candles[candles.length - 1];
+    const previous = candles[candles.length - 2];
+
+    const isInside =
+      lastCandle.high <= previous.high && lastCandle.low >= previous.low;
+
+    const percentChange =
+      ((lastCandle.close - previous.close) / previous.close) * 100;
+
+    // Get the volume of the last candle
+    const lastVolume = candles[candles.length - 1].volume;
+
+    const past40VolumeSum = candles
+      .slice(-41, -1)
+      .reduce((sum, candle) => sum + candle.volume, 0);
+
+    const averageVolumePast40Days = past40VolumeSum / 40;
+    const relativeVolume = (lastVolume / averageVolumePast40Days) * 100;
+    const adrP = adrPercent(candles, 20);
+    const closes = candles.map((c) => c.close);
+
+    const tenEMAOrError = ema(10, closes);
+    const twentyOneEMAOrError = ema(21, closes);
+    const fiftySMAOrError = sma(50, closes);
+    const twoHundredSMAOrError = sma(200, closes);
+
+    let atAVWAPE = false;
+    const earnings = this.cacheSvc.getEarningsCalendar(ticker);
+
+    if (earnings) {
+      // Sort the earnings array by date in descending order
+      earnings
+        .filter((e) => e.eps != null)
+        .sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+
+      const lastTwoEarningsDates = earnings.slice(-2);
+      const [prevEarningsAVWAP, lastEarningsAVWAP] = lastTwoEarningsDates.map(
+        (e) => {
+          const eDate = new Date(e.date);
+
+          if (e.time === "amc") {
+            eDate.setDate(eDate.getDate() + 1);
+          }
+
+          const dateStr = formatDateToEST(eDate);
+
+          return this.indicatorsService.anchoredVWAP(ticker, dateStr);
+        }
+      );
+
+      if (prevEarningsAVWAP) {
+        match(
+          prevEarningsAVWAP,
+          (err) => console.log(err),
+          (avwap) => {
+            const lastAVWap = avwap[avwap.length - 1];
+            if (
+              lastCandle.low <= lastAVWap.value &&
+              lastCandle.high > lastAVWap.value
+            ) {
+              atAVWAPE = true;
+            }
+          }
+        );
+      }
+
+      if (lastEarningsAVWAP) {
+        match(
+          lastEarningsAVWAP,
+          (err) => console.log(err),
+          (avwap) => {
+            const lastAVWap = avwap[avwap.length - 1];
+            if (
+              lastCandle.low <= lastAVWap.value &&
+              lastCandle.high > lastAVWap.value
+            ) {
+              atAVWAPE = true;
+            }
+          }
+        );
+      }
+    }
+
+    const result: TableResponseRow = {
+      ticker: ticker,
+      name: profile.companyName,
+      last: lastCandle,
+      isInsideBar: isInside,
+      atEarningsAVWap: atAVWAPE,
+      percentChange: Number(percentChange.toFixed(2)),
+      marketCap: profile.MktCap,
+      adrP: !isADRPercentError(adrP) ? Number(adrP.toFixed(2)) : 0,
+      volume: lastCandle.volume,
+      rVolume: Number(relativeVolume.toFixed(2)),
+      rsRankFromSlope: aggregate,
+      compositeRelativeStrengthRank:
+        this.getCompositeRelativeStrengthForSymbol(ticker),
+      sector: profile.sector,
+      industry: profile.industry,
+      tenEMA: !isMovingAverageError(tenEMAOrError)
+        ? Number(tenEMAOrError.toFixed(2))
+        : undefined,
+      twentyOneEMA: !isMovingAverageError(twentyOneEMAOrError)
+        ? Number(twentyOneEMAOrError.toFixed(2))
+        : undefined,
+      fiftySMA: !isMovingAverageError(fiftySMAOrError)
+        ? Number(fiftySMAOrError.toFixed(2))
+        : undefined,
+      twoHundredSMA: !isMovingAverageError(twoHundredSMAOrError)
+        ? Number(twoHundredSMAOrError.toFixed(2))
+        : undefined,
+    };
+
+    return result;
+  }
+
   private calculateRelativeStrengthsByLineSlope(
     dataset: Map<Ticker, Candle[]>,
     benchmark: Candle[]
@@ -925,34 +1211,39 @@ export class RelativeStrengthService {
       const relativeStrengthLine: RelativeStrengthPoint[] = [];
       candles.sort((a, b) => a.date - b.date);
 
-      for (let j = 0; j < candles.length; j++) {
-        const benchMarkClose = benchmarkCloses.get(candles[j].dateStr!);
-        if (!benchMarkClose) {
-          console.error(
-            `No benchmark close found for ${candles[j].dateStr} - ticker ${ticker}`
-          );
-        } else {
-          const sliced = candles.slice(0, j + 1);
-          const benchmarks: number[] = [];
-          const slicedSanitized: number[] = [];
-          sliced.forEach((s) => {
-            const bench = benchmark.find((b) => b.dateStr === s.dateStr);
-            if (bench) {
-              benchmarks.push(bench.close - bench.open);
-              slicedSanitized.push(s.close - s.open);
-            }
-          });
+      const lastTwenty = candles.slice(-20).map((c) => c.volume);
+      const avg = findMean(lastTwenty);
 
-          const point: RelativeStrengthPoint = {
-            date: candles[j].date,
-            dateString: candles[j].dateStr!,
-            rsRatio: candles[j].close / benchMarkClose,
-          };
-          relativeStrengthLine.push(point);
+      if (avg > 500000) {
+        for (let j = 0; j < candles.length; j++) {
+          const benchMarkClose = benchmarkCloses.get(candles[j].dateStr!);
+          if (!benchMarkClose) {
+            console.error(
+              `No benchmark close found for ${candles[j].dateStr} - ticker ${ticker}`
+            );
+          } else {
+            const sliced = candles.slice(0, j + 1);
+            const benchmarks: number[] = [];
+            const slicedSanitized: number[] = [];
+            sliced.forEach((s) => {
+              const bench = benchmark.find((b) => b.dateStr === s.dateStr);
+              if (bench) {
+                benchmarks.push(bench.close - bench.open);
+                slicedSanitized.push(s.close - s.open);
+              }
+            });
+
+            const point: RelativeStrengthPoint = {
+              date: candles[j].date,
+              dateString: candles[j].dateStr!,
+              rsRatio: candles[j].close / benchMarkClose,
+            };
+            relativeStrengthLine.push(point);
+          }
         }
-      }
-      if (relativeStrengthLine.length > 0) {
-        rsLineMap.set(ticker, relativeStrengthLine);
+        if (relativeStrengthLine.length > 0) {
+          rsLineMap.set(ticker, relativeStrengthLine);
+        }
       }
     });
 
@@ -1006,5 +1297,56 @@ export class RelativeStrengthService {
     return stockRS
       ? stockRS
       : this.etfRelativeStrengthsFromSlopeMap.get(ticker);
+  }
+
+  public getAvgIndustryRelativeStrengths():
+    | AvgIndustryGroupRelativeStrength[]
+    | undefined {
+    const avgIndustryRelativeStrengths: AvgIndustryGroupRelativeStrength[] = [];
+
+    // Iterate over each industry group in the map
+    this.stockIndustryGroupRelativeStrengthsFromSlopeMap.forEach(
+      (aggregateArray, industryGroup) => {
+        // Initialize the aggregate object
+        const avgRelativeStrengths: RelativeStrengthsFromSlopeAggregate = {
+          oneDay: 0,
+          oneWeek: 0,
+          oneMonth: 0,
+          threeMonth: 0,
+          sixMonth: 0,
+          oneYear: 0,
+          composite: 0,
+        };
+
+        // Calculate the sum of relative strengths for each timeframe
+        for (const aggregate of aggregateArray) {
+          avgRelativeStrengths.oneDay += aggregate.oneDay;
+          avgRelativeStrengths.oneWeek += aggregate.oneWeek;
+          avgRelativeStrengths.oneMonth += aggregate.oneMonth;
+          avgRelativeStrengths.threeMonth += aggregate.threeMonth;
+          avgRelativeStrengths.sixMonth += aggregate.sixMonth;
+          avgRelativeStrengths.oneYear += aggregate.oneYear;
+          avgRelativeStrengths.composite += aggregate.composite;
+        }
+
+        // Calculate the average relative strengths for each timeframe
+        const count = aggregateArray.length;
+        Number((avgRelativeStrengths.oneDay /= count).toFixed(2));
+        Number((avgRelativeStrengths.oneWeek /= count).toFixed(2));
+        Number((avgRelativeStrengths.oneMonth /= count).toFixed(2));
+        Number((avgRelativeStrengths.threeMonth /= count).toFixed(2));
+        Number((avgRelativeStrengths.sixMonth /= count).toFixed(2));
+        Number((avgRelativeStrengths.oneYear /= count).toFixed(2));
+        Number((avgRelativeStrengths.composite /= count).toFixed(2));
+
+        // Store the average relative strengths along with the industry group
+        avgIndustryRelativeStrengths.push({
+          industry: industryGroup,
+          avgRelativeStrengths: avgRelativeStrengths,
+        });
+      }
+    );
+
+    return avgIndustryRelativeStrengths;
   }
 }

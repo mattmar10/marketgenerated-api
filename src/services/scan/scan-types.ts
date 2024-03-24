@@ -3,6 +3,7 @@ import {
   RelativeStrengthLineStats,
   RelativeStrengthsFromSlopeAggregate,
 } from "../relative-strength/relative-strength-types";
+import { TableResponseRow } from "../response-types";
 
 export interface ScanResults {
   scanName: string;
@@ -32,23 +33,6 @@ export function isScanResults(object: any): object is ScanResults {
   );
 }
 
-export type ScanResponseRow = {
-  ticker: Ticker;
-  name: string;
-  price: number;
-  adrP: number;
-  percentChange: number;
-  marketCap: number;
-  volume: number;
-  rVolume: number;
-  sector?: string;
-  industry?: string;
-  rsRankFromSlope: RelativeStrengthsFromSlopeAggregate | undefined;
-  compositeRelativeStrengthRank: number;
-  //eps
-  //pe
-};
-
 export type ScanIdentifier = string;
 
 export type ScanResultsWithRows = {
@@ -56,8 +40,8 @@ export type ScanResultsWithRows = {
   completionTime: string;
   scanName: string;
   description: string;
-  etfs: ScanResponseRow[];
-  stocks: ScanResponseRow[];
+  etfs: TableResponseRow[];
+  stocks: TableResponseRow[];
 };
 
 export interface ScanMatchResponse {

@@ -46,6 +46,47 @@ export class RelativeStrengthController {
     }
   }
 
+  @httpGet("/leaders-rsline/period/:timePeriod")
+  public getLeadersBySlopeByTimePeriod(
+    @request() req: Request,
+    @response() res: Response,
+    @next() next: NextFunction,
+    @requestParam("timePeriod") timePeriod: string,
+    @queryParam("count") count: string = "100",
+    @queryParam("minRSScore") minRSscore: string = "80",
+    @queryParam("assetType") assetType: string
+  ) {
+    if (
+      !timePeriod ||
+      !isRelativeStrengthTimePeriod(timePeriod) ||
+      !count ||
+      !(assetType == "stocks" || assetType == "etfs")
+    ) {
+      res.status(400).send();
+    } else {
+      const result =
+        this.relativeStrengthSvc.getRelativeStrengthLeadersForTimePeriodFromRSLine(
+          Number(count),
+          Number(minRSscore),
+          timePeriod,
+          assetType
+        );
+
+      res.json(result);
+    }
+  }
+
+  @httpGet("/industry-groups")
+  public getAvgIndustyGroupRelativeStrengths(
+    @request() req: Request,
+    @response() res: Response,
+    @next() next: NextFunction
+  ) {
+    const result = this.relativeStrengthSvc.getAvgIndustryRelativeStrengths();
+
+    res.json(result);
+  }
+
   @httpGet("/leaders/composite")
   public getCompositeRSLeaders(
     @request() req: Request,

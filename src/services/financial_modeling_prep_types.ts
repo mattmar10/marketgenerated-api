@@ -6,7 +6,7 @@ export const FMPHistoricalSchema = z.object({
   high: z.number(),
   low: z.number(),
   close: z.number(),
-  adjClose: z.number(),
+  adjClose: z.number().nullable(),
   volume: z.number(),
   unadjustedVolume: z.number(),
   change: z.number().optional(),
@@ -107,7 +107,7 @@ export const FmpProfileSchema = z.object({
   currency: z.string(),
   cik: z.string().nullable(),
   isin: z.string().nullable(),
-  cusip: z.string(),
+  cusip: z.string().nullable(),
   exchange: z.string(),
   exchangeShortName: z.string(),
   industry: z.string().nullable(),
@@ -147,3 +147,53 @@ export const CandleSchema = z.object({
 export const CandleListSchema = CandleSchema.array();
 export type FMPCandle = z.infer<typeof CandleSchema>;
 export type CandlesList = z.infer<typeof CandleListSchema>;
+
+const EarningsDateSchema = z.object({
+  date: z.string(),
+  symbol: z.string(),
+  eps: z.nullable(z.number()),
+  epsEstimated: z.nullable(z.number()),
+  time: z.enum(["bmo", "amc"]), // Assuming "bmo" or "amc" are the possible values for time
+  revenue: z.nullable(z.number()),
+  revenueEstimated: z.nullable(z.number()),
+  updatedFromDate: z.string(), // You might want to change this to a Date type if you need strict date validation
+  fiscalDateEnding: z.string(), // You might want to change this to a Date type if you need strict date validation
+});
+
+export type FMPEarningsDate = z.infer<typeof EarningsDateSchema>;
+export const FMPEarningsCalendarSchema = EarningsDateSchema.array();
+export type FMPEarningsCalendar = z.infer<typeof FMPEarningsCalendarSchema>;
+
+export function isFMPEarningsCalendar(data: any): data is FMPEarningsCalendar {
+  if (!Array.isArray(data)) {
+    return false;
+  }
+
+  for (const item of data) {
+    if (!isFMPEarningsDate(item)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Type guard function for FMPEarningsDate
+export function isFMPEarningsDate(data: any): data is FMPEarningsDate {
+  // Check if data matches the schema
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    typeof data.date === "string" &&
+    typeof data.symbol === "string" &&
+    (typeof data.eps === "number" || data.eps === null) &&
+    (typeof data.epsEstimated === "number" || data.epsEstimated === null) &&
+    ["bmo", "amc"].includes(data.time) &&
+    (typeof data.revenue === "number" || data.revenue === null) &&
+    (typeof data.revenueEstimated === "number" ||
+      data.revenueEstimated === null) &&
+    typeof data.updatedFromDate === "string" &&
+    typeof data.fiscalDateEnding === "string"
+    // Add more checks if needed
+  );
+}
