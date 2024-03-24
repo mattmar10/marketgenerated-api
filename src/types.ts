@@ -19,6 +19,7 @@ const TYPES = {
   FundamentalRelativeStrengthService: Symbol.for(
     "com.marketgenerated.api.FundamentalRelativeStrengthService"
   ),
+  VolumeSurgeService: Symbol.for("com.marketgenerated.api.VolumeSurgeService"),
 };
 
 export default TYPES;

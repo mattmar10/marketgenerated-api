@@ -11,6 +11,7 @@ import {
 } from "inversify-express-utils";
 import { ScanService } from "../../services/scan/scan-service";
 import { ScanResultsWithRows } from "../../services/scan/scan-types";
+import { TableResponseRow } from "../../services/response-types";
 @controller("/scans")
 export class ScansController {
   constructor(@inject(TYPES.ScanService) private scanService: ScanService) {}
@@ -34,6 +35,56 @@ export class ScansController {
     } else {
       return scans;
     }
+  }
+
+  @httpGet("/volume-surge-candidates")
+  public getVolumeSurgeCandidates(
+    @request() req: Request,
+    @response() res: Response
+  ) {
+    const scanIds: string[] = [
+      "matts-recipe",
+      "mr-q-recipe",
+      "the-winning-team",
+      "ants",
+    ];
+
+    const stockResults: TableResponseRow[] = [];
+    const etfResults: TableResponseRow[] = [];
+
+    const resultsOfScans = scanIds.map((s) =>
+      this.scanService.getLatestScanResults(s)
+    );
+
+    resultsOfScans.forEach((sr) => {
+      sr?.stocks.forEach((s) => {
+        if (
+          s.rsRankFromSlope &&
+          !stockResults.find((sr) => sr.ticker === s.ticker)
+        ) {
+          stockResults.push(s);
+        }
+      });
+      sr?.etfs.forEach((e) => {
+        if (
+          e.rsRankFromSlope &&
+          !etfResults.find((er) => er.ticker === e.ticker)
+        ) {
+          etfResults.push(e);
+        }
+      });
+    });
+
+    const result: ScanResultsWithRows = {
+      scanId: "volume-surge-candidates",
+      completionTime: new Date().toString(),
+      scanName: "volume-surge-candidates",
+      description: "Composite volume surge scan",
+      etfs: etfResults,
+      stocks: stockResults,
+    };
+
+    return result;
   }
 
   @httpGet("/results")

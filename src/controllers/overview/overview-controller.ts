@@ -43,9 +43,9 @@ export class OverviewController {
 
     if (isOverviewError(returnsOrError)) {
       res.status(500).json(returnsOrError);
+    } else {
+      res.json(returnsOrError);
     }
-
-    res.json(returnsOrError);
   }
 
   @httpGet("/movers")

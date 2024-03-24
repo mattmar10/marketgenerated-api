@@ -20,6 +20,7 @@ import "./controllers/search/search-controller";
 import "./controllers/screener/screener-controller";
 import "./controllers/weekly/weekly-controller";
 import "./controllers/scans/scans-controller";
+import "./controllers/volume-surge/volume-surge-controller";
 
 import { SearchService } from "./services/search/search_service";
 import { ScreenerService } from "./services/screener/screener-service";
@@ -31,6 +32,8 @@ import { IndicatorsService } from "./services/indicator/indicator-service";
 import { Client, Pool } from "pg";
 import { ScanRepository } from "./repositories/scan/scan-repository";
 import { ScanService } from "./services/scan/scan-service";
+import { getPGConfig } from "./utils/pg-utils";
+import { VolumeSurgeService } from "./services/volume-surge/volume-surge-service";
 
 // Load environment variables from .env file
 (async () => {
@@ -50,14 +53,6 @@ import { ScanService } from "./services/scan/scan-service";
   const PG_DB_USER = process.env.MG_DB_USER;
   const PG_DB_PASSWORD = process.env.MG_DB_PASSWORD;
 
-  /*const dbConfig = {
-    user: PG_DB_USER,
-    password: PG_DB_PASSWORD,
-    database: PG_DB_DATABASE,
-    host: PG_DB_HOST,
-    port: 5432, // Default PostgreSQL port
-  };*/
-
   const pool = new Pool({
     user: PG_DB_USER,
     password: PG_DB_PASSWORD,
@@ -67,6 +62,8 @@ import { ScanService } from "./services/scan/scan-service";
     max: 5, // Maximum number of clients in the pool
     idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
   });
+
+  const dbPool = new Pool(await getPGConfig());
 
   if (!PG_DB_DATABASE || !PG_DB_HOST || !PG_DB_PASSWORD || !PG_DB_USER) {
     console.error("Missing required environment variables for Postgres");
@@ -108,7 +105,7 @@ import { ScanService } from "./services/scan/scan-service";
   container.bind<S3Client>(TYPES.S3Client).toConstantValue(client);
   //container.bind<Client>(TYPES.PGClient).toConstantValue(pgClient);
 
-  container.bind<Pool>(TYPES.PGPool).toConstantValue(pool);
+  container.bind<Pool>(TYPES.PGPool).toConstantValue(dbPool);
 
   // create server
   const server = new InversifyExpressServer(container);
@@ -142,6 +139,21 @@ import { ScanService } from "./services/scan/scan-service";
     await dailyCacheService.initializeCache();
   }
   console.timeEnd("Daily Cache Service Initialization");
+
+  container
+    .bind<VolumeSurgeService>(TYPES.VolumeSurgeService)
+    .to(VolumeSurgeService)
+    .inSingletonScope();
+
+  const volumeSurgeService = container.get<VolumeSurgeService>(
+    TYPES.VolumeSurgeService
+  );
+  volumeSurgeService.startPolling();
+
+  container
+    .bind<IndicatorsService>(TYPES.IndicatorService)
+    .to(IndicatorsService)
+    .inSingletonScope();
 
   container
     .bind<LevelsService>(TYPES.LevelsService)
@@ -204,11 +216,6 @@ import { ScanService } from "./services/scan/scan-service";
   container
     .bind<ScanService>(TYPES.ScanService)
     .to(ScanService)
-    .inSingletonScope();
-
-  container
-    .bind<IndicatorsService>(TYPES.IndicatorService)
-    .to(IndicatorsService)
     .inSingletonScope();
 
   const scanService = container.get<ScanService>(TYPES.ScanService);

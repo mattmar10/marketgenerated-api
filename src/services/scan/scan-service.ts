@@ -14,12 +14,11 @@ import { DailyCacheService } from "../daily_cache_service";
 import {
   ScanIdentifier,
   ScanMatchResponse,
-  ScanResponseRow,
   ScanResultsWithRows,
   isScanResults,
 } from "./scan-types";
-import { Ticker, isRight } from "../../MarketGeneratedTypes";
-import { getDateNMonthsAgo } from "../../utils/epoch_utils";
+import { Ticker, isRight, match } from "../../MarketGeneratedTypes";
+import { formatDateToEST, getDateNMonthsAgo } from "../../utils/epoch_utils";
 import { Candle } from "../../modles/candle";
 import { SymbolService } from "../symbol/symbol_service";
 import { FMPSymbolProfileData } from "../financial_modeling_prep_types";
@@ -27,6 +26,13 @@ import { RelativeStrengthService } from "../relative-strength/relative-strength-
 import { PredefinedScanResponse } from "../../controllers/scans/scan-request-responses";
 import { adrPercent, isADRPercentError } from "../../indicators/adr-percent";
 import { date, map } from "zod";
+import { TableResponseRow } from "../response-types";
+import {
+  ema,
+  isMovingAverageError,
+  sma,
+} from "../../indicators/moving-average";
+import { IndicatorsService } from "../indicator/indicator-service";
 
 @injectable()
 export class ScanService {
@@ -43,6 +49,8 @@ export class ScanService {
     private readonly relativeStrengthService: RelativeStrengthService,
     @inject(TYPES.DailyCacheService)
     private readonly cacheService: DailyCacheService,
+    @inject(TYPES.IndicatorService)
+    private readonly indicatorService: IndicatorsService,
     @inject(TYPES.ScanRepository) private readonly repo: ScanRepository,
     @inject(TYPES.S3Client) private readonly s3Client: S3Client
   ) {
@@ -134,10 +142,10 @@ export class ScanService {
             scanName: s.name,
             description: s.description,
             etfs: etfRows.filter(
-              (row): row is ScanResponseRow => row !== undefined
+              (row): row is TableResponseRow => row !== undefined
             ),
             stocks: stockRows.filter(
-              (row): row is ScanResponseRow => row !== undefined
+              (row): row is TableResponseRow => row !== undefined
             ),
           };
 
@@ -154,17 +162,18 @@ export class ScanService {
     const fromDB = await Promise.all(promises);
 
     this.latestScanResults = fromDB.filter(
-      (row): row is ScanResultsWithRows => row !== undefined
+      (row): row is ScanResultsWithRows =>
+        row !== undefined && row?.scanId != null
     );
   }
 
-  private buildScanResultRow(ticker: Ticker): ScanResponseRow | undefined {
+  private buildScanResultRow(ticker: Ticker): TableResponseRow | undefined {
     const profile = this.profiles.find((p) => p.Symbol === ticker);
     if (!profile) {
       //console.error(`Could not find profile for ${ticker}`);
       return undefined;
     }
-    const startDate = getDateNMonthsAgo(2);
+    const startDate = getDateNMonthsAgo(12);
     const filterFn = (candle: Candle) => candle.date >= startDate.getTime();
 
     const candles = this.cacheService.getCandlesWithFilter(ticker, filterFn);
@@ -192,6 +201,8 @@ export class ScanService {
     const lastCandle = candles[candles.length - 1];
     const previous = candles[candles.length - 2];
 
+    const isInside =
+      lastCandle.high <= previous.high && lastCandle.low >= previous.low;
     const percentChange =
       ((lastCandle.close - previous.close) / previous.close) * 100;
 
@@ -204,13 +215,76 @@ export class ScanService {
 
     const averageVolumePast40Days = past40VolumeSum / 40;
     const relativeVolume = (lastVolume / averageVolumePast40Days) * 100;
+    const closes = candles.map((c) => c.close);
 
     const adrP = adrPercent(candles, 20);
+    const tenEMAOrError = ema(10, closes);
+    const twentyOneEMAOrError = ema(21, closes);
+    const fiftySMAOrError = sma(50, closes);
+    const twoHundredSMAOrError = sma(200, closes);
 
-    const result: ScanResponseRow = {
+    let atAVWAPE = false;
+    const earnings = this.cacheService.getEarningsCalendar(ticker);
+
+    if (earnings && earnings.length > 1) {
+      // Sort the earnings array by date in descending order
+      const filteredEarnings = earnings
+        .filter((e) => e.eps != null)
+        .sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+
+      const lastTwoEarningsDates = filteredEarnings.slice(-2);
+      const [prevEarningsAVWAP, lastEarningsAVWAP] = lastTwoEarningsDates.map(
+        (e) => {
+          const eDate = new Date(e.date);
+
+          if (e.time === "amc") {
+            eDate.setDate(eDate.getDate() + 1);
+          }
+
+          const dateStr = formatDateToEST(eDate);
+
+          return this.indicatorService.anchoredVWAP(ticker, dateStr);
+        }
+      );
+
+      if (
+        prevEarningsAVWAP &&
+        lastEarningsAVWAP &&
+        isRight(prevEarningsAVWAP) &&
+        isRight(lastEarningsAVWAP)
+      ) {
+        const lastAVWap =
+          lastEarningsAVWAP.value[lastEarningsAVWAP.value.length - 1];
+        if (
+          lastAVWap &&
+          lastAVWap.value &&
+          lastCandle.low <= lastAVWap.value &&
+          lastCandle.high > lastAVWap.value
+        ) {
+          atAVWAPE = true;
+        }
+
+        const prevAVWAP =
+          prevEarningsAVWAP.value[prevEarningsAVWAP.value.length - 1];
+        if (
+          prevAVWAP &&
+          prevAVWAP.value &&
+          lastCandle.low <= prevAVWAP.value &&
+          lastCandle.high > prevAVWAP.value
+        ) {
+          atAVWAPE = true;
+        }
+      }
+    }
+
+    const result: TableResponseRow = {
       ticker: ticker,
       name: profile.companyName,
-      price: lastCandle.close,
+      last: lastCandle,
+      isInsideBar: isInside,
+      atEarningsAVWap: atAVWAPE,
       percentChange: Number(percentChange.toFixed(2)),
       marketCap: profile.MktCap,
       adrP: !isADRPercentError(adrP) ? Number(adrP.toFixed(2)) : 0,
@@ -224,6 +298,16 @@ export class ScanService {
         ),
       sector: profile.sector,
       industry: profile.industry,
+      tenEMA: !isMovingAverageError(tenEMAOrError) ? tenEMAOrError : undefined,
+      twentyOneEMA: !isMovingAverageError(twentyOneEMAOrError)
+        ? twentyOneEMAOrError
+        : undefined,
+      fiftySMA: !isMovingAverageError(fiftySMAOrError)
+        ? fiftySMAOrError
+        : undefined,
+      twoHundredSMA: !isMovingAverageError(twoHundredSMAOrError)
+        ? twoHundredSMAOrError
+        : undefined,
     };
 
     return result;

@@ -9,11 +9,24 @@ import {
   Ticker,
   isLeft,
   isRight,
+  match,
 } from "../../MarketGeneratedTypes";
 import { BetaWithAlpha, getBeta } from "../../indicators/beta";
 
 import { slidingWindow, sortCandlesByDate } from "../../utils/basic_utils";
-import { BetaLinePoint } from "../../indicators/linep-point-types";
+import {
+  AVWAPE,
+  AVWapLinePoint,
+  BetaLinePoint,
+  LinePoint,
+} from "../../indicators/linep-point-types";
+import axios from "axios";
+import { CandleListSchema, FMPCandle } from "../financial_modeling_prep_types";
+import {
+  calculatePopulationStandardDeviation,
+  isMathError,
+} from "../../utils/math_utils";
+import { formatDateToEST } from "../../utils/epoch_utils";
 
 export type IndicatorError = {
   message: string;
@@ -25,6 +38,9 @@ export interface BetaResult {
 
 @injectable()
 export class IndicatorsService {
+  private FINANCIAL_MODELING_PREP_URL =
+    "https://financialmodelingprep.com/api/v3";
+  private financialModelingPrepKey = process.env.FINANCIAL_MODELING_PREP_KEY;
   constructor(
     @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService
   ) {}
@@ -133,5 +149,113 @@ export class IndicatorsService {
     };
 
     return Right(result);
+  }
+
+  public anchoredVWAP(
+    ticker: Ticker,
+    startDate: string
+  ): Either<IndicatorError, AVWapLinePoint[]> {
+    const candles = this.cacheSvc.getCandles(ticker);
+
+    const date = new Date(startDate);
+    date.setDate(date.getDate() - 1);
+
+    const filteredCandles = candles.filter(
+      (c) => c.date >= new Date(date).getTime()
+    );
+
+    const vwapEPoints: AVWapLinePoint[] = [];
+    let totalVolume = 0;
+    let totalPrice = 0;
+
+    for (let i = 0; i < filteredCandles.length; i++) {
+      const candle = filteredCandles[i];
+      const index = candles.findIndex((c) => c.dateStr === candle.dateStr);
+      const startIndex = Math.max(0, index - 19); // Calculate the start index for the slice, ensuring it doesn't go below 0
+      const endIndex = index + 1; // Calculate the end index for the slice, adding 1 to include the candle at the specified index
+
+      const last20Candles = candles.slice(startIndex, endIndex);
+      const closes = last20Candles.map((c) => c.close);
+      const stdDev = calculatePopulationStandardDeviation(closes);
+
+      const avgPrice =
+        (candle.open + candle.high + candle.low + candle.close) / 4;
+      totalVolume += candle.volume;
+      totalPrice += candle.volume * avgPrice;
+
+      const anchoredVWAP = totalPrice / totalVolume;
+
+      const stdD = isMathError(stdDev) ? 0 : stdDev;
+
+      // Create a LineChartPoint object and push it into the vwapEPoints array
+      vwapEPoints.push({
+        time: candle.dateStr!,
+        value: Number(anchoredVWAP.toFixed(2)),
+        standardDeviation: Number(stdD.toFixed(2)),
+      });
+    }
+
+    return Right(vwapEPoints);
+  }
+
+  public anchoredVWAPE(ticker: Ticker): Either<IndicatorError, AVWAPE[]> {
+    const earningsCalendar = this.cacheSvc.getEarningsCalendar(ticker);
+    if (earningsCalendar) {
+      const filteredEarnings = earningsCalendar.filter((e) => e.eps != null);
+
+      filteredEarnings.sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      const results: AVWAPE[] = [];
+      if (filteredEarnings.length > 0) {
+        const lastEarnings = filteredEarnings[filteredEarnings.length - 1];
+        const date = new Date(lastEarnings.date);
+
+        if (lastEarnings.time == "amc") {
+          date.setDate(date.getDate() + 2);
+        } else {
+          date.setDate(date.getDate() + 1);
+        }
+
+        const avap = this.anchoredVWAP(ticker, formatDateToEST(date));
+        match(
+          avap,
+          (err) => console.error(err),
+          (avwapE) =>
+            results.push({
+              earningsDate: formatDateToEST(date),
+              timeSeries: avwapE,
+            })
+        );
+      }
+
+      if (filteredEarnings.length > 1) {
+        const lastEarnings = filteredEarnings[filteredEarnings.length - 2];
+        const date = new Date(lastEarnings.date);
+
+        if (lastEarnings.time == "amc") {
+          date.setDate(date.getDate() + 1);
+        } else {
+          date.setDate(date.getDate() + 1);
+        }
+
+        const avap = this.anchoredVWAP(ticker, formatDateToEST(date));
+        match(
+          avap,
+          (err) => console.error(err),
+          (avwapE) =>
+            results.push({
+              earningsDate: formatDateToEST(date),
+              timeSeries: avwapE,
+            })
+        );
+      }
+      return Right(results);
+    } else {
+      return Left({
+        message: "No earnings data",
+      });
+    }
   }
 }
