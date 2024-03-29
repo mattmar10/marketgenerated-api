@@ -904,7 +904,8 @@ export class RelativeStrengthService {
 
   public getRelativeStrengthLineLeaders(
     top: number = 50,
-    minClosePrice = 10
+    industryGroup?: string,
+    sector?: string
   ): RelativeStrengthPerformers {
     function sortByLineStrength(
       a: RelativeStrengthsForSymbolStats,
@@ -955,27 +956,68 @@ export class RelativeStrengthService {
       });
     }
 
-    const stocksData = transform(this.stocksRSForSymbols)
-      .sort(sortByLineStrength)
-      .slice(0, top);
+    if (industryGroup || sector) {
+      let filtered: RelativeStrengthsForSymbol[] = [];
+      if (industryGroup) {
+        const industryTickers = this.profiles
+          .filter(
+            (p) =>
+              p.industry?.toLowerCase().trim() ===
+              industryGroup?.toLowerCase().trim()
+          )
+          .map((p) => p.Symbol);
 
-    const etfsData = transform(this.etfsRSForSymbols)
-      .sort(sortByLineStrength)
-      .slice(0, top);
+        filtered = this.stocksRSForSymbols.filter((s) =>
+          industryTickers.includes(s.symbol)
+        );
+      } else if (sector) {
+        const sectorTickers = this.profiles
+          .filter(
+            (p) =>
+              p.sector?.toLowerCase().trim() === sector?.toLowerCase().trim()
+          )
+          .map((p) => p.Symbol);
 
-    const result: RelativeStrengthPerformers = {
-      stocks: stocksData,
-      etfs: etfsData,
-    };
+        filtered = this.stocksRSForSymbols.filter((s) =>
+          sectorTickers.includes(s.symbol)
+        );
+      }
 
-    return result;
+      const stocksData = transform(filtered)
+        .sort(sortByLineStrength)
+        .slice(0, top);
+
+      const result: RelativeStrengthPerformers = {
+        stocks: stocksData,
+        etfs: [],
+      };
+
+      return result;
+    } else {
+      const stocksData = transform(this.stocksRSForSymbols)
+        .sort(sortByLineStrength)
+        .slice(0, top);
+
+      const etfsData = transform(this.etfsRSForSymbols)
+        .sort(sortByLineStrength)
+        .slice(0, top);
+
+      const result: RelativeStrengthPerformers = {
+        stocks: stocksData,
+        etfs: etfsData,
+      };
+
+      return result;
+    }
   }
 
   public getRelativeStrengthLeadersForTimePeriodFromRSLine(
     top: number = 100,
     minimumRSRank: number = 80,
     timePeriod: RelativeStrengthTimePeriod,
-    assetType: "stocks" | "etfs" = "stocks"
+    assetType: "stocks" | "etfs" = "stocks",
+    industryGroup?: string,
+    sector?: string
   ): TableResponseRow[] {
     function getTopNByRelativeStrength(
       map: Map<Ticker, RelativeStrengthsFromSlopeAggregate>,
@@ -1011,30 +1053,93 @@ export class RelativeStrengthService {
       key = "oneYear";
     }
 
-    const filtered =
-      assetType == "stocks"
-        ? getTopNByRelativeStrength(
-            this.stockRelativeStrengthsFromSlopeMap,
-            key,
-            top
+    if (industryGroup || sector) {
+      const filteredMap = new Map<
+        string,
+        RelativeStrengthsFromSlopeAggregate
+      >();
+
+      if (industryGroup) {
+        const industryTickers = this.profiles
+          .filter(
+            (p) =>
+              p.industry?.toLowerCase().trim() ===
+              industryGroup?.toLowerCase().trim()
           )
-        : getTopNByRelativeStrength(
-            this.etfRelativeStrengthsFromSlopeMap,
-            key,
-            top
-          );
+          .map((p) => p.Symbol);
 
-    const map = new Map(filtered);
-    const responseList: TableResponseRow[] = [];
+        for (const [
+          key,
+          value,
+        ] of this.stockRelativeStrengthsFromSlopeMap.entries()) {
+          if (industryTickers.includes(key)) {
+            filteredMap.set(key, value);
+          }
+        }
+      } else if (sector) {
+        const sectorTickers = this.profiles
+          .filter(
+            (p) =>
+              p.sector?.toLowerCase().trim() === sector?.toLowerCase().trim()
+          )
+          .map((p) => p.Symbol);
 
-    map.forEach((value, key) => {
-      const resultRow = this.buildResultRow(key, value);
-      if (resultRow) {
-        responseList.push(resultRow);
+        for (const [
+          key,
+          value,
+        ] of this.stockRelativeStrengthsFromSlopeMap.entries()) {
+          if (sectorTickers.includes(key)) {
+            filteredMap.set(key, value);
+          }
+        }
       }
-    });
 
-    return responseList;
+      const filtered =
+        assetType == "stocks"
+          ? getTopNByRelativeStrength(filteredMap, key, top)
+          : getTopNByRelativeStrength(
+              this.etfRelativeStrengthsFromSlopeMap,
+              key,
+              top
+            );
+
+      const map = new Map(filtered);
+      const responseList: TableResponseRow[] = [];
+
+      map.forEach((value, key) => {
+        const resultRow = this.buildResultRow(key, value);
+        if (resultRow) {
+          responseList.push(resultRow);
+        }
+      });
+
+      return responseList;
+    } else {
+      const filtered =
+        assetType == "stocks"
+          ? getTopNByRelativeStrength(
+              this.stockRelativeStrengthsFromSlopeMap,
+              key,
+              top
+            )
+          : getTopNByRelativeStrength(
+              this.etfRelativeStrengthsFromSlopeMap,
+              key,
+              top
+            );
+
+      const map = new Map(filtered);
+      const responseList: TableResponseRow[] = [];
+
+      map.forEach((value, key) => {
+        const resultRow = this.buildResultRow(key, value);
+        if (resultRow) {
+          responseList.push(resultRow);
+        }
+      });
+
+      return responseList;
+    }
   }
 
   private buildResultRow(
@@ -1159,6 +1264,7 @@ export class RelativeStrengthService {
     const result: TableResponseRow = {
       ticker: ticker,
       name: profile.companyName,
+      exchange: profile.exchange,
       last: lastCandle,
       isInsideBar: isInside,
       atEarningsAVWap: atAVWAPE,
