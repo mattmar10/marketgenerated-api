@@ -282,6 +282,7 @@ export class ScanService {
     const result: TableResponseRow = {
       ticker: ticker,
       name: profile.companyName,
+      exchange: profile.exchangeShortName,
       last: lastCandle,
       isInsideBar: isInside,
       atEarningsAVWap: atAVWAPE,

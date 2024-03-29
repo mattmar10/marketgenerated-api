@@ -62,7 +62,7 @@ export class VolumeSurgeService {
     const start = new Date();
     start.setHours(8, 25, 0); // 8:30 am
     const end = new Date();
-    end.setHours(23, 0, 0); // 5:00 pm
+    end.setHours(15, 0, 0); // \3:00 pm
     return now >= start && now <= end;
   }
 

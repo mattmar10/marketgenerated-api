@@ -5,6 +5,7 @@ import { RelativeStrengthsFromSlopeAggregate } from "./relative-strength/relativ
 export type TableResponseRow = {
   ticker: Ticker;
   name: string;
+  exchange: string;
   last: Candle;
   adrP: number;
   percentChange: number;

@@ -54,7 +54,9 @@ export class RelativeStrengthController {
     @requestParam("timePeriod") timePeriod: string,
     @queryParam("count") count: string = "100",
     @queryParam("minRSScore") minRSscore: string = "80",
-    @queryParam("assetType") assetType: string
+    @queryParam("assetType") assetType: string,
+    @queryParam("industryGroup") industryGroup: string,
+    @queryParam("sector") sector: string
   ) {
     if (
       !timePeriod ||
@@ -69,7 +71,9 @@ export class RelativeStrengthController {
           Number(count),
           Number(minRSscore),
           timePeriod,
-          assetType
+          assetType,
+          industryGroup,
+          sector
         );
 
       res.json(result);
@@ -106,12 +110,17 @@ export class RelativeStrengthController {
     @request() req: Request,
     @response() res: Response,
     @next() next: NextFunction,
-    @queryParam("count") count: number
+    @queryParam("count") count: number,
+    @queryParam("industryGroup") industryGroup: string,
+    @queryParam("sector") sector: string
   ) {
     console.log("getting relative strength line leaders");
 
-    const result =
-      this.relativeStrengthSvc.getRelativeStrengthLineLeaders(count);
+    const result = this.relativeStrengthSvc.getRelativeStrengthLineLeaders(
+      count,
+      industryGroup,
+      sector
+    );
 
     res.json(result);
   }
