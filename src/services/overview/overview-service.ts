@@ -42,14 +42,20 @@ import {
 } from "../../indicators/moving-average";
 
 export type OverviewServiceError = string;
+export type SectorName = string;
 
 @injectable()
 export class OverviewService {
   private dailyStockMovers: DailyMover[];
   private dailyETFMovers: DailyMover[];
 
-  private percentAboveSMAMap: Map<
+  private percentAboveSMAIndexMap: Map<
     MajorStockIndex,
+    Map<number, PercentAboveSMALine>
+  > = new Map();
+
+  private percentAboveSMASectorMap: Map<
+    SectorName,
     Map<number, PercentAboveSMALine>
   > = new Map();
 
@@ -62,8 +68,8 @@ export class OverviewService {
     @inject(TYPES.StockIndexService) private stockIndexSvc: StockIndexService
   ) {
     this.buildMovers();
-    this.buildPercentAboveSMAMap();
-    this.buildAdvanceDeclineLineMap();
+    //this.buildPercentAboveSMAMap();
+    //this.buildAdvanceDeclineLineMap();
   }
 
   private buildMovers() {
@@ -203,39 +209,39 @@ export class OverviewService {
     // Get the time in milliseconds
     const startMillis = threeYearsOneDayAgo.getTime();
     const endMillis = currentDate.getTime();
-    const sp500PercentAbove50 = this.getPercentAboveSMALine(
+    const sp500PercentAbove50 = this.getPercentAboveSMALineForIndex(
       "SP500",
       "50",
       startMillis,
       endMillis
     );
-    const sp500PercentAbove200 = this.getPercentAboveSMALine(
+    const sp500PercentAbove200 = this.getPercentAboveSMALineForIndex(
       "SP500",
       "200",
       startMillis,
       endMillis
     );
 
-    const ns100PercentAbove50 = this.getPercentAboveSMALine(
+    const ns100PercentAbove50 = this.getPercentAboveSMALineForIndex(
       "NS100",
       "50",
       startMillis,
       endMillis
     );
-    const ns100PercentAbove200 = this.getPercentAboveSMALine(
+    const ns100PercentAbove200 = this.getPercentAboveSMALineForIndex(
       "NS100",
       "200",
       startMillis,
       endMillis
     );
 
-    const dowPercentAbove50 = this.getPercentAboveSMALine(
+    const dowPercentAbove50 = this.getPercentAboveSMALineForIndex(
       "DOW",
       "50",
       startMillis,
       endMillis
     );
-    const dowHistoryPercentAbove200 = this.getPercentAboveSMALine(
+    const dowHistoryPercentAbove200 = this.getPercentAboveSMALineForIndex(
       "DOW",
       "200",
       startMillis,
@@ -303,9 +309,60 @@ export class OverviewService {
       );
     }
 
-    this.percentAboveSMAMap.set("DOW", dowMap);
-    this.percentAboveSMAMap.set("SP500", sp500Map);
-    this.percentAboveSMAMap.set("NS100", ns100Map);
+    this.percentAboveSMAIndexMap.set("DOW", dowMap);
+    this.percentAboveSMAIndexMap.set("SP500", sp500Map);
+    this.percentAboveSMAIndexMap.set("NS100", ns100Map);
+
+    const stocks = this.symbolSvc.getStocks();
+    const uniqueSectors = new Set(
+      stocks
+        .map((s) => s.sector) // Extract sectors
+        .filter((sector) => sector !== undefined && sector !== null) // Filter out undefined sectors
+    );
+
+    const uniqueSectorsArray = Array.from(uniqueSectors);
+
+    for (const sector of uniqueSectorsArray) {
+      const filtered = stocks
+        .filter((s) => s.sector === sector)
+        .map((s) => s.Symbol);
+      const aboveFifty = this.getPercentAboveSMALine(
+        filtered,
+        "50",
+        startMillis,
+        endMillis
+      );
+      const aboveTwoHundred = this.getPercentAboveSMALine(
+        filtered,
+        "200",
+        startMillis,
+        endMillis
+      );
+
+      const [above50s, above200s] = await Promise.all([
+        aboveFifty,
+        aboveTwoHundred,
+      ]);
+      const sectorMap: Map<number, PercentAboveSMALine> = new Map();
+
+      if (!isDataError(above50s)) {
+        sectorMap.set(50, above50s);
+      } else {
+        console.error(
+          `unable to calculate percent of 50 SMA for sector ${sector}`
+        );
+      }
+
+      if (!isDataError(above200s)) {
+        sectorMap.set(200, above200s);
+      } else {
+        console.error(
+          `unable to calculate percent of 200 SMA for sector ${sector}`
+        );
+      }
+
+      this.percentAboveSMASectorMap.set(sector!.toLowerCase(), sectorMap);
+    }
   }
 
   private getOverview(etfTicker: Ticker, etfHoldings: EtfHoldingInfo[]) {
@@ -624,24 +681,44 @@ export class OverviewService {
     index: MajorStockIndex,
     period: number
   ): PercentAboveSMALine | undefined {
-    return this.percentAboveSMAMap.get(index)?.get(period);
+    return this.percentAboveSMAIndexMap.get(index)?.get(period);
+  }
+
+  public getCachedSectorsPercentAboveSMALine(sector: string, period: number) {
+    return this.percentAboveSMASectorMap.get(sector)?.get(period);
+  }
+
+  public async getPercentAboveSMALineForIndex(
+    index: MajorStockIndex = "SP500",
+    period: string,
+    startDateInMillis: number,
+    endDateInMillis: number
+  ) {
+    const constituents = await this.stockIndexSvc.getConstituents(index);
+
+    if (!isStockIndexConstituentList(constituents)) {
+      return {
+        errorMessage: "Unable to calculate percent above SMA for index",
+      };
+    }
+
+    const symbols = constituents.map((s) => s.symbol);
+    return this.getPercentAboveSMALine(
+      symbols,
+      period,
+      startDateInMillis,
+      endDateInMillis
+    );
   }
 
   public async getPercentAboveSMALine(
-    index: MajorStockIndex = "SP500",
+    tickers: Ticker[],
     period: string,
     startDateInMillis: number,
     endDateInMillis: number
   ): Promise<PercentAboveSMALine | DataError> {
     console.log("calculating percent above 50sma");
     const parsedPeriod = parseInt(period, 10);
-    const sAndPP = await this.stockIndexSvc.getConstituents(index);
-
-    if (!isStockIndexConstituentList(sAndPP)) {
-      return {
-        errorMessage: "Unable to calculate percent above 50sma",
-      };
-    }
 
     type SMADataPoint = {
       symbol: string;
@@ -654,8 +731,8 @@ export class OverviewService {
 
     let allDataPoints: SMADataPoint[] = [];
 
-    for (const constituent of sAndPP) {
-      const candles: Candle[] = this.cacheSvc.getCandles(constituent.symbol);
+    for (const ticker of tickers) {
+      const candles: Candle[] = this.cacheSvc.getCandles(ticker);
       const filtered = candles.filter(
         (c) => c.date >= startDateInMillis && c.date <= endDateInMillis
       );
@@ -672,7 +749,6 @@ export class OverviewService {
       const fiftySMA = calculateSMA(sorted, parsedPeriod);
 
       if (isMovingAverageError(fiftySMA)) {
-        console.log("Not enough candles to calculate SMA");
         continue;
       }
 
@@ -686,7 +762,7 @@ export class OverviewService {
         const percentAwayFromSMA = ((c.close - t.value) / t.value) * 100;
 
         const dataPoint: SMADataPoint = {
-          symbol: constituent.symbol,
+          symbol: ticker,
           date: c.date,
           dateString: c.dateStr!,
           close: c.close,
@@ -745,11 +821,14 @@ export class OverviewService {
 
     if (!isStockIndexConstituentList(constituents)) {
       return {
-        errorMessage: "Unable to calculate percent above 50sma",
+        errorMessage: "Unable to get advance decline line",
       };
     }
-
-    const data: Map<string, number> = new Map();
+    type AdvancesAndDeclines = {
+      advances: number;
+      declines: number;
+    };
+    const data: Map<string, AdvancesAndDeclines> = new Map();
 
     for (const c of constituents) {
       const candles: Candle[] = this.cacheSvc.getCandles(c.symbol);
@@ -766,14 +845,31 @@ export class OverviewService {
         return 0;
       });
 
-      for (const candle of sorted) {
-        const toAdd = candle.close > candle.open ? 1 : -1;
-        const count = data.get(candle.dateStr!);
+      for (let i = 1; i < sorted.length; i++) {
+        const candle = sorted[i];
+        const prevCandle = sorted[i - 1];
 
-        if (count) {
-          data.set(candle.dateStr!, count + toAdd);
+        const isAdvancing = candle.close > prevCandle.close;
+        const isDeclining = candle.close < prevCandle.close;
+
+        const previousValue = data.get(candle.dateStr!);
+
+        if (previousValue) {
+          const valueToSet: AdvancesAndDeclines = {
+            advances: isAdvancing
+              ? previousValue.advances + 1
+              : previousValue.advances,
+            declines: isDeclining
+              ? previousValue.declines + 1
+              : previousValue.declines,
+          };
+          data.set(candle.dateStr!, valueToSet);
         } else {
-          data.set(candle.dateStr!, toAdd);
+          const valueToSet: AdvancesAndDeclines = {
+            advances: isAdvancing ? 1 : 0,
+            declines: isDeclining ? 1 : 0,
+          };
+          data.set(candle.dateStr!, valueToSet);
         }
       }
     }
@@ -783,13 +879,14 @@ export class OverviewService {
     let cumulativeValue = 0;
 
     for (const [date, value] of data.entries()) {
-      cumulativeValue += value;
+      cumulativeValue += value.advances - value.declines;
       advanceDeclineLine.push({
         dateStr: date,
-        value: cumulativeValue,
+        cumulative: cumulativeValue,
+        advances: value.advances,
+        declines: value.declines,
       });
     }
-
     return {
       lineseries: advanceDeclineLine,
     };

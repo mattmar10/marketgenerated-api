@@ -1,4 +1,5 @@
 import { Ticker } from "../../MarketGeneratedTypes";
+import { MovingAverageError } from "../../indicators/moving-average";
 import { Candle } from "../../modles/candle";
 
 export interface ConstituentPriceReturn {
@@ -77,7 +78,9 @@ export interface DailySectorsOverview {
 
 export interface AdvanceDeclineDataPoint {
   dateStr: string;
-  value: number;
+  cumulative: number;
+  advances: number;
+  declines: number;
 }
 export interface AdvanceDeclineOverview {
   lineseries: AdvanceDeclineDataPoint[];
@@ -90,4 +93,83 @@ export interface PercentAboveMAPoint {
 
 export interface PercentAboveSMALine {
   timeSeries: PercentAboveMAPoint[];
+}
+
+export interface UpDownDataPoint {
+  dateStr: string;
+  upVolume: number;
+  downVolume: number;
+}
+export interface UpDownOverview {
+  lineSeries: UpDownDataPoint[];
+}
+
+export interface FiftyTwoWeekHighsLowsDataPoint {
+  dateStr: string;
+  fiftyTwoWeekHighs: number;
+  fiftyTwoWeekLows: number;
+}
+export interface FiftyTwoWeekHighsLowsOverview {
+  lineSeries: FiftyTwoWeekHighsLowsDataPoint[];
+}
+
+export interface DateCount {
+  dateStr: string;
+  count: number;
+}
+
+export interface MarketBreadthPoint {
+  dateStr: string;
+  advances: number;
+  declines: number;
+  upVolume: number;
+  downVolume: number;
+  fourPercentAdvancers: number;
+  fourPercentDecliners: number;
+  fiftyTwoWeekHighs?: number;
+  fiftyTwoWeekLows?: number;
+}
+export interface MarketBreadthOverview {
+  advanceDeclineLine: AdvanceDeclineDataPoint[];
+  upDownVolumeLine: UpDownDataPoint[];
+  fiftyTwoWeekHighsLowsLine: FiftyTwoWeekHighsLowsDataPoint[];
+  mcClellanOscillator: McClellanOscillatorPoint[];
+  percentAboveTwentySMA: PercentAboveMAPoint[];
+  percentAboveFiftySMA: PercentAboveMAPoint[];
+  percentAboveTwoHundredSMA: PercentAboveMAPoint[];
+  upFourPercentLine: DateCount[];
+  downFourPercentLine: DateCount[];
+  totalStockCount: number;
+}
+
+export interface MarketBreadthResponse {
+  marketBreadthOverview: MarketBreadthOverview;
+  generalMarketOverview: GeneralMarkeOverview;
+}
+
+export interface McClellanOscillatorPoint {
+  dateStr: string;
+  value: number;
+  cumulative: number;
+}
+
+export interface McClellanOscillator {
+  lineSeries: McClellanOscillatorPoint[];
+}
+
+export interface ETFSnapshot {
+  lastPrice: number;
+  fiveSMA: number;
+  tenEMA: number;
+  twentyOneEMA: number;
+  fiftySMA: number;
+  twoHundredSMA: number;
+}
+
+export interface GeneralMarkeOverview {
+  spySnapshot: ETFSnapshot | MovingAverageError[];
+  rspSnapshot: ETFSnapshot | MovingAverageError[];
+  qqqSnapshot: ETFSnapshot | MovingAverageError[];
+  qqqeSnapshot: ETFSnapshot | MovingAverageError[];
+  percentOfSuccesfulTenDayHighs: number;
 }

@@ -11,7 +11,6 @@ import {
 import { DailyCacheService } from "../../services/daily_cache_service";
 import { OverviewService } from "../../services/overview/overview-service";
 import TYPES from "../../types";
-import { ETFOverviewPriceReturns } from "./overview-responses";
 import moment = require("moment");
 import { MajorStockIndex } from "../../services/stock-index/stock-index-types";
 
@@ -22,14 +21,6 @@ export class OverviewController {
     @inject(TYPES.OverviewService) private overviewSvc: OverviewService
   ) {}
 
-  /*@httpGet("/returns")
-  public returns(@request() req: Request, @response() res: Response) {
-    const etfHoldingReturns: ETFOverviewPriceReturns =
-      this.overviewSvc.getOverviewReturns();
-
-    res.json(etfHoldingReturns);
-  }
-*/
   @httpGet("/index-returns")
   public async indexReturns(
     @request() req: Request,
@@ -78,6 +69,21 @@ export class OverviewController {
       index,
       parseInt(period, 10)
     );
+    res.json(percentLine);
+  }
+
+  @httpGet("/sectors/:sector/percent-above-sma")
+  public async sectorsPercentAbovesSMA(
+    @request() req: Request,
+    @response() res: Response,
+    @requestParam("sector") sector: string,
+    @queryParam("period") period: string
+  ) {
+    const percentLine =
+      await this.overviewSvc.getCachedSectorsPercentAboveSMALine(
+        sector.toLowerCase(),
+        parseInt(period, 10)
+      );
     res.json(percentLine);
   }
 
