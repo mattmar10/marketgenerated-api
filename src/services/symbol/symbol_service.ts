@@ -22,6 +22,7 @@ import {
   PeriodType,
   Quote,
   QuoteArraySchema,
+  QuoteElementSchema,
   SymbolFundamentalChangeStats,
   SymbolFundamentalChangesStats,
   SymbolFundamentalStats,
@@ -103,7 +104,7 @@ export class SymbolService {
       const profileData = await SymbolService.fetchSymbolProfileData();
 
       const parsedProfileData = profileData.filter(
-        (pd) => pd.VolAvg > 50000 && pd.Price > 5
+        (pd) => pd.VolAvg > 75000 && pd.Price > 5
       );
 
       console.log(`Discovered ${parsedProfileData.length} symbols`);
@@ -175,6 +176,46 @@ export class SymbolService {
       console.error(error);
       return Promise.resolve(
         Left<SymbolServiceError>(`Unable to get quote for symbol ${symbol}`)
+      );
+    }
+  }
+
+  public async getQuotesForSymbols(
+    tickers: string[]
+  ): Promise<Either<SymbolServiceError, Quote[]>> {
+    const schema = z
+      .array(z.any())
+      .transform((as) =>
+        as.filter((a) => QuoteArraySchema.safeParse(a).success)
+      );
+
+    let commaSeparatedString: string = tickers.join(",");
+    const url = `${this.FINANCIAL_MODELING_PREP_URL}/quote/${commaSeparatedString}?apikey=${this.financialModelingPrepKey}`;
+
+    try {
+      const response = await axios.get(url);
+      const parsedQuotes: (Quote | null)[] = response.data.map(
+        (quoteData: any) => {
+          const parseResult = QuoteElementSchema.safeParse(quoteData);
+          if (parseResult.success) {
+            return parseResult.data;
+          } else {
+            console.error(`Error parsing quote  ${parseResult.error.message}`);
+            return null;
+          }
+        }
+      );
+
+      // Filter out the successfully parsed quotes
+      const validQuotes = parsedQuotes.filter(
+        (quote) => quote !== null
+      ) as Quote[];
+
+      return Right(validQuotes);
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(`Unable to get quote for symbol ${tickers}`)
       );
     }
   }

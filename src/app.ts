@@ -21,6 +21,7 @@ import "./controllers/screener/screener-controller";
 import "./controllers/weekly/weekly-controller";
 import "./controllers/scans/scans-controller";
 import "./controllers/volume-surge/volume-surge-controller";
+import "./controllers/market-breadth/market-breadth-controller";
 
 import { SearchService } from "./services/search/search_service";
 import { ScreenerService } from "./services/screener/screener-service";
@@ -34,6 +35,8 @@ import { ScanRepository } from "./repositories/scan/scan-repository";
 import { ScanService } from "./services/scan/scan-service";
 import { getPGConfig } from "./utils/pg-utils";
 import { VolumeSurgeService } from "./services/volume-surge/volume-surge-service";
+import { MarketBreadthService } from "./services/breadth/market-breadth-service";
+import { RealtimeQuoteService } from "./services/realtime-quote-service";
 
 // Load environment variables from .env file
 (async () => {
@@ -137,6 +140,7 @@ import { VolumeSurgeService } from "./services/volume-surge/volume-surge-service
     await dailyCacheService.initializeFromLocalFilePath(localCachePath);
   } else {
     await dailyCacheService.initializeCache();
+    dailyCacheService.initializeTwentySMACache();
   }
   console.timeEnd("Daily Cache Service Initialization");
 
@@ -163,6 +167,11 @@ import { VolumeSurgeService } from "./services/volume-surge/volume-surge-service
   container
     .bind<OverviewService>(TYPES.OverviewService)
     .to(OverviewService)
+    .inSingletonScope();
+
+  container
+    .bind<MarketBreadthService>(TYPES.MarketBreadthService)
+    .to(MarketBreadthService)
     .inSingletonScope();
 
   container
@@ -220,6 +229,16 @@ import { VolumeSurgeService } from "./services/volume-surge/volume-surge-service
 
   const scanService = container.get<ScanService>(TYPES.ScanService);
   scanService.initialize();
+
+  container
+    .bind<RealtimeQuoteService>(TYPES.RealtimeQuoteService)
+    .to(RealtimeQuoteService)
+    .inSingletonScope();
+
+  const realtimeQuoteService = container.get<RealtimeQuoteService>(
+    TYPES.RealtimeQuoteService
+  );
+  realtimeQuoteService.initialize();
 
   server.setConfig((app) => {
     app.use(

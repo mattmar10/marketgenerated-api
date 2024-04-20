@@ -35,6 +35,7 @@ import {
 } from "./financial_modeling_prep_types";
 import Bottleneck from "bottleneck";
 import { symbol } from "zod";
+import { isMovingAverageError, sma } from "../indicators/moving-average";
 
 interface CacheEntry {
   symbol: Ticker;
@@ -59,10 +60,12 @@ export class DailyCacheService {
   private fetchNewCandles: boolean;
   private candles: Map<Ticker, Candle[]>;
   private earnings: Map<Ticker, FMPEarningsCalendar>;
+  private dailyTwentySMACache: Map<Ticker, number>;
 
   constructor(@inject(TYPES.S3Client) private s3Client: S3Client) {
     this.candles = new Map<Ticker, Candle[]>();
     this.earnings = new Map<Ticker, FMPEarningsCalendar>();
+    this.dailyTwentySMACache = new Map<Ticker, number>();
     this.fetchNewCandles = parseBooleanEnv(
       process.env.CACHE_FETCH_NEW_CANDLES,
       false
@@ -313,6 +316,35 @@ export class DailyCacheService {
 
       console.log("Cache loading completed.");
     }
+  }
+
+  public getDailyTwentySMA(ticker: Ticker): number | undefined {
+    return this.dailyTwentySMACache.get(ticker);
+  }
+
+  public initializeTwentySMACache(): void {
+    console.log("initializing 20SMA Daily Cache");
+    for (const [ticker, candles] of this.candles) {
+      const sorted = [...candles].sort((a, b) => {
+        if (a.date > b.date) {
+          return 1;
+        } else if (a.date < b.date) {
+          return -1;
+        }
+        return 0;
+      });
+
+      const smaRes = sma(
+        20,
+        sorted.map((c) => c.close)
+      );
+
+      if (!isMovingAverageError(smaRes)) {
+        this.dailyTwentySMACache.set(ticker, smaRes);
+      }
+    }
+
+    console.log("finished initializing 20SMA Daily Cache");
   }
 
   public async initializeFromLocalFilePath(filepath: string): Promise<void> {
