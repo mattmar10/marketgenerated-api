@@ -140,7 +140,7 @@ import { RealtimeQuoteService } from "./services/realtime-quote-service";
     await dailyCacheService.initializeFromLocalFilePath(localCachePath);
   } else {
     await dailyCacheService.initializeCache();
-    dailyCacheService.initializeTwentySMACache();
+    dailyCacheService.initializeSMACaches();
   }
   console.timeEnd("Daily Cache Service Initialization");
 

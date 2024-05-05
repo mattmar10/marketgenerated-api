@@ -65,7 +65,8 @@ export class RealtimeQuoteService {
     const chunkSize = Math.ceil(filteredStocks.length / numArrays);
 
     for (let i = 0; i < filteredStocks.length; i += chunkSize) {
-      this.tickerBuckets.push(stocks.slice(i, i + chunkSize));
+      const chunk = stocks.slice(i, i + chunkSize);
+      this.tickerBuckets.push(chunk);
     }
 
     // Set up refresh method to fire every 10 seconds

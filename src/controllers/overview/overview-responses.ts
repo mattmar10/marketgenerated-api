@@ -1,6 +1,11 @@
+import { count } from "aws-sdk/clients/health";
 import { Ticker } from "../../MarketGeneratedTypes";
 import { MovingAverageError } from "../../indicators/moving-average";
 import { Candle } from "../../modles/candle";
+import {
+  FMPProfile,
+  FMPSymbolProfileData,
+} from "../../services/financial_modeling_prep_types";
 
 export interface ConstituentPriceReturn {
   symbol: Ticker;
@@ -82,10 +87,26 @@ export interface AdvanceDeclineDataPoint {
   advances: number;
   declines: number;
 }
+
+export interface GlobalDailyBreadthDataPoint {
+  dateStr: string;
+  cumulative: number;
+  globalDailyBreadth: number;
+}
+
 export interface AdvanceDeclineOverview {
   lineseries: AdvanceDeclineDataPoint[];
 }
 
+export interface MarketReturnsDataPoint {
+  dateStr: string;
+  mean: number;
+  median: number;
+}
+
+export interface MarketReturnsLine {
+  lineSeries: MarketReturnsDataPoint[];
+}
 export interface PercentAboveMAPoint {
   dateStr: string;
   percentAboveMA: number;
@@ -126,9 +147,60 @@ export interface MarketBreadthPoint {
   downVolume: number;
   fourPercentAdvancers: number;
   fourPercentDecliners: number;
+  oneMonthTwentyFivePercentAdvancers: number;
+  oneMonthTwentyFivePercentDecliners: number;
+  threeMonthTwentyFivePercentAdvancers: number;
+  threeMonthTwentyFivePercentDecliners: number;
   fiftyTwoWeekHighs?: number;
   fiftyTwoWeekLows?: number;
+  returns: number[];
 }
+
+export interface NewMarketBreadthPoint {
+  totalStockCount: number;
+  dateStr: string;
+  advances: number;
+  declines: number;
+  upVolume: number;
+  downVolume: number;
+  fourPercentAdvancers: number;
+  fourPercentDecliners: number;
+  oneMonthTwentyFivePercentAdvancers: number;
+  oneMonthTwentyFivePercentDecliners: number;
+  threeMonthTwentyFivePercentAdvancers: number;
+  threeMonthTwentyFivePercentDecliners: number;
+  fiftyTwoWeekHighs?: number;
+  fiftyTwoWeekLows?: number;
+  meanReturn: number;
+  medianReturn: number;
+  percentAboveTenEMA: number;
+  percentAboveTwentyOneEMA: number;
+  percentAboveFiftySMA: number;
+  percentAboveTwoHundredSMA: number;
+  globalDailyBreadth: number;
+}
+
+export interface DailyMarketBreadthPoint {
+  dateStr: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  profile: FMPSymbolProfileData;
+  advancingOrDeclining: "advancing" | "declining" | "flat";
+  volume: number;
+  fiftyTwoWeekHigh: boolean;
+  newFiftfiftyTwoWeekLow: boolean;
+  oneDayReturn: number;
+  oneWeekReturn: number;
+  oneMonthReturn: number;
+  threeMonthReturn: number;
+  tenEMA: number | undefined;
+  twentyOneEMA: number | undefined;
+  fiftySMA: number | undefined;
+  twoHundredSMA: number | undefined;
+}
+
 export interface MarketBreadthOverview {
   advanceDeclineLine: AdvanceDeclineDataPoint[];
   upDownVolumeLine: UpDownDataPoint[];
@@ -139,11 +211,56 @@ export interface MarketBreadthOverview {
   percentAboveTwoHundredSMA: PercentAboveMAPoint[];
   upFourPercentLine: DateCount[];
   downFourPercentLine: DateCount[];
+  oneMonthUpTwentyFivePercentyLine: DateCount[];
+  oneMonthDownTwentyFivePercentyLine: DateCount[];
+  threeMonthsUpTwentyFivePercentyLine: DateCount[];
+  threeMonthsDownTwentyFivePercentyLine: DateCount[];
+  marketReturnsLine: MarketReturnsDataPoint[];
   totalStockCount: number;
 }
 
+export interface NewMarketBreadthOverview {
+  advanceDeclineLine: AdvanceDeclineDataPoint[];
+  stockCountLine: DateCount[];
+  upDownVolumeLine: UpDownDataPoint[];
+  fiftyTwoWeekHighsLowsLine: FiftyTwoWeekHighsLowsDataPoint[];
+  mcClellanOscillator: McClellanOscillatorPoint[];
+  percentAboveTenEMA: PercentAboveMAPoint[];
+  percentAboveTwentyOneEMA: PercentAboveMAPoint[];
+  percentAboveFiftySMA: PercentAboveMAPoint[];
+  percentAboveTwoHundredSMA: PercentAboveMAPoint[];
+  upFourPercentLine: DateCount[];
+  downFourPercentLine: DateCount[];
+  oneMonthUpTwentyFivePercentyLine: DateCount[];
+  oneMonthDownTwentyFivePercentyLine: DateCount[];
+  threeMonthsUpTwentyFivePercentyLine: DateCount[];
+  threeMonthsDownTwentyFivePercentyLine: DateCount[];
+  globalDailyBreadthLine: GlobalDailyBreadthDataPoint[];
+  marketReturnsLine: MarketReturnsDataPoint[];
+}
+
+export interface CurrentDayMarketBreadthSnapshotPoint {
+  advanceDecline: AdvanceDeclineDataPoint;
+  fiftyTwoWeekHighsLows?: FiftyTwoWeekHighsLowsDataPoint;
+  upFourPercent?: number;
+  downFourPercent?: number;
+  returns?: MarketReturnsDataPoint;
+  totalStockCount: number;
+}
+
+export interface SectorCurrentDayMarketBreadthSnapshot {
+  sector: string;
+  overview: CurrentDayMarketBreadthSnapshotPoint;
+}
+export interface CurrentDayMarketBreadthSnapshot {
+  universeOverview: CurrentDayMarketBreadthSnapshotPoint;
+  nyseOverview: CurrentDayMarketBreadthSnapshotPoint;
+  nasdaqOverview: CurrentDayMarketBreadthSnapshotPoint;
+  sectorsOverviews: SectorCurrentDayMarketBreadthSnapshot[];
+}
+
 export interface MarketBreadthResponse {
-  marketBreadthOverview: MarketBreadthOverview;
+  marketBreadthOverview: NewMarketBreadthOverview;
   generalMarketOverview: GeneralMarkeOverview;
 }
 

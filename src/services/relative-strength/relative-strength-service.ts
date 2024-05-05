@@ -543,6 +543,7 @@ export class RelativeStrengthService {
           tenEMA: tenEMA,
           twentyEMA: twentyEMA,
           fiftySMA: fiftySMA,
+          relativeStrengthsFromSlope: this.getRelativeStrengthFromSlope(key),
         };
 
         this.stocksRSForSymbols.push(relativeStringForSym);
@@ -583,6 +584,7 @@ export class RelativeStrengthService {
           tenEMA: tenEMA,
           twentyEMA: twentyEMA,
           fiftySMA: fiftySMA,
+          relativeStrengthsFromSlope: this.getRelativeStrengthFromSlope(key),
         };
 
         this.etfsRSForSymbols.push(relativeStringForSym);
@@ -1233,8 +1235,10 @@ export class RelativeStrengthService {
           prevEarningsAVWAP,
           (err) => console.log(err),
           (avwap) => {
-            const lastAVWap = avwap[avwap.length - 1];
+            const lastAVWap =
+              avwap.length > 0 ? avwap[avwap.length - 1] : undefined;
             if (
+              lastAVWap &&
               lastCandle.low <= lastAVWap.value &&
               lastCandle.high > lastAVWap.value
             ) {

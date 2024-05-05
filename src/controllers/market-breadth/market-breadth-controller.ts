@@ -40,6 +40,15 @@ export class MarketBreadthController {
     res.json(resp);
   }
 
+  @httpGet("/overview/snapshot")
+  public marketBreadthSnapshot(
+    @request() req: Request,
+    @response() res: Response
+  ) {
+    const resp = this.breadthService.getMarketBreadthSnapshot();
+    res.json(resp);
+  }
+
   @httpGet("/overview/exchange/:exchangeName")
   public marketBreadthExchange(
     @request() req: Request,
