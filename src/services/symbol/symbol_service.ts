@@ -15,6 +15,8 @@ import {
 
 import { Either, Left, Right, Ticker } from "../../MarketGeneratedTypes";
 import {
+  EtfHolding,
+  EtfHoldingArraySchema,
   FmpIncomeStatementList,
   FmpIncomeStatementListSchema,
   FmpNewsList,
@@ -104,7 +106,12 @@ export class SymbolService {
       const profileData = await SymbolService.fetchSymbolProfileData();
 
       const parsedProfileData = profileData.filter(
-        (pd) => pd.VolAvg > 75000 && pd.Price > 5
+        (pd) =>
+          pd.VolAvg > 75000 &&
+          pd.Price > 5 &&
+          pd.country !== null &&
+          pd.country !== undefined &&
+          pd.country === "US"
       );
 
       console.log(`Discovered ${parsedProfileData.length} symbols`);
@@ -200,7 +207,6 @@ export class SymbolService {
           if (parseResult.success) {
             return parseResult.data;
           } else {
-            console.error(`Error parsing quote  ${parseResult.error.message}`);
             return null;
           }
         }
@@ -279,6 +285,33 @@ export class SymbolService {
       return Promise.resolve(
         Left<SymbolServiceError>(
           `Unable to get daily candles for symbol ${symbol}`
+        )
+      );
+    }
+  }
+
+  public async getEtfHoldings(
+    etfSymbol: Ticker
+  ): Promise<Either<SymbolServiceError, EtfHolding[]>> {
+    console.log(`fetching etf holdings for for ${etfSymbol}`);
+    const url = `${this.FINANCIAL_MODELING_PREP_URL}/etf-holder/${etfSymbol}?apikey=${this.financialModelingPrepKey}`;
+
+    try {
+      const response = await axios.get(url);
+      const parsed = EtfHoldingArraySchema.safeParse(response.data);
+
+      if (parsed.success) {
+        return Right<EtfHolding[]>(parsed.data);
+      } else {
+        return Left<SymbolServiceError>(
+          `Error parsing etf holdings for ${etfSymbol}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      return Promise.resolve(
+        Left<SymbolServiceError>(
+          `Unable to get etf holdings for symbol ${etfSymbol}`
         )
       );
     }

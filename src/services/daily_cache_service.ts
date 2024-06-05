@@ -35,7 +35,7 @@ import {
 } from "./financial_modeling_prep_types";
 import Bottleneck from "bottleneck";
 import { symbol } from "zod";
-import { isMovingAverageError, sma } from "../indicators/moving-average";
+import { ema, isMovingAverageError, sma } from "../indicators/moving-average";
 
 interface CacheEntry {
   symbol: Ticker;
@@ -60,12 +60,18 @@ export class DailyCacheService {
   private fetchNewCandles: boolean;
   private candles: Map<Ticker, Candle[]>;
   private earnings: Map<Ticker, FMPEarningsCalendar>;
-  private dailyTwentySMACache: Map<Ticker, number>;
+  private dailyTenEMACache: Map<Ticker, number>;
+  private dailyTwentyOneEMACache: Map<Ticker, number>;
+  private dailyFiftySMACache: Map<Ticker, number>;
+  private dailyTwoHundredSMACache: Map<Ticker, number>;
 
   constructor(@inject(TYPES.S3Client) private s3Client: S3Client) {
     this.candles = new Map<Ticker, Candle[]>();
     this.earnings = new Map<Ticker, FMPEarningsCalendar>();
-    this.dailyTwentySMACache = new Map<Ticker, number>();
+    this.dailyTwentyOneEMACache = new Map<Ticker, number>();
+    this.dailyTenEMACache = new Map<Ticker, number>();
+    this.dailyFiftySMACache = new Map<Ticker, number>();
+    this.dailyTwoHundredSMACache = new Map<Ticker, number>();
     this.fetchNewCandles = parseBooleanEnv(
       process.env.CACHE_FETCH_NEW_CANDLES,
       false
@@ -318,12 +324,24 @@ export class DailyCacheService {
     }
   }
 
-  public getDailyTwentySMA(ticker: Ticker): number | undefined {
-    return this.dailyTwentySMACache.get(ticker);
+  public getDailyTenEMA(ticker: Ticker): number | undefined {
+    return this.dailyTenEMACache.get(ticker);
   }
 
-  public initializeTwentySMACache(): void {
-    console.log("initializing 20SMA Daily Cache");
+  public getDailyTwentyOneEMA(ticker: Ticker): number | undefined {
+    return this.dailyTwentyOneEMACache.get(ticker);
+  }
+
+  public getDailyFiftySMA(ticker: Ticker): number | undefined {
+    return this.dailyFiftySMACache.get(ticker);
+  }
+
+  public getDailyTwoHundredSMA(ticker: Ticker): number | undefined {
+    return this.dailyTwoHundredSMACache.get(ticker);
+  }
+
+  public initializeSMACaches(): void {
+    console.log("initializing SMA Daily Caches");
     for (const [ticker, candles] of this.candles) {
       const sorted = [...candles].sort((a, b) => {
         if (a.date > b.date) {
@@ -334,13 +352,30 @@ export class DailyCacheService {
         return 0;
       });
 
-      const smaRes = sma(
-        20,
-        sorted.map((c) => c.close)
-      );
+      const closes = sorted.map((c) => c.close);
 
-      if (!isMovingAverageError(smaRes)) {
-        this.dailyTwentySMACache.set(ticker, smaRes);
+      const tenEMARes = ema(10, closes);
+
+      if (!isMovingAverageError(tenEMARes)) {
+        this.dailyTenEMACache.set(ticker, tenEMARes);
+      }
+
+      const emaRes = ema(21, closes);
+
+      if (!isMovingAverageError(emaRes)) {
+        this.dailyTwentyOneEMACache.set(ticker, emaRes);
+      }
+
+      const fiftySMA = sma(50, closes);
+
+      if (!isMovingAverageError(fiftySMA)) {
+        this.dailyFiftySMACache.set(ticker, fiftySMA);
+      }
+
+      const twoHundredSMA = sma(200, closes);
+
+      if (!isMovingAverageError(twoHundredSMA)) {
+        this.dailyTwoHundredSMACache.set(ticker, twoHundredSMA);
       }
     }
 

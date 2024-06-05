@@ -16,6 +16,7 @@ import {
 } from "../../services/symbol/symbol_service";
 import { Either, match } from "../../MarketGeneratedTypes";
 import {
+  EtfHolding,
   FmpIncomeStatementList,
   FmpNewsList,
   PeriodType,
@@ -336,6 +337,34 @@ export class SymbolController {
           console.error(
             `Error getting income statement for ${ticker} ${error}`
           );
+          res.status(500).json({ error: error });
+        },
+        (news) => {
+          res.json(news);
+        }
+      );
+    }
+  }
+
+  @httpGet("/etf/:ticker/holdings")
+  public async etfHoldings(
+    @request() req: Request,
+    @response() res: Response,
+    @next() next: NextFunction,
+    @requestParam("ticker") ticker: string
+  ) {
+    const trimmed = ticker.trim().toUpperCase();
+
+    if (!trimmed || trimmed.length == 0) {
+      res.status(400).send();
+    } else {
+      const holdingsResp: Either<SymbolServiceError, EtfHolding[]> =
+        await this.symbolService.getEtfHoldings(ticker);
+
+      match(
+        holdingsResp,
+        (error) => {
+          console.error(`Error getting news for ${ticker} ${error}`);
           res.status(500).json({ error: error });
         },
         (news) => {

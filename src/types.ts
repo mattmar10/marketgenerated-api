@@ -18,6 +18,9 @@ const TYPES = {
   RelativeStrengthService: Symbol.for(
     "com.markgetgenerated.api.RelativeStrengthService"
   ),
+  RotationalStrategy: Symbol.for(
+    "com.markgetgenerated.api.stategy.RotationalStrategy"
+  ),
   S3Client: Symbol.for("com.marketgenerated.api.s3.client"),
   ScreenerService: Symbol.for("com.marketgenerated.api.ScreenerService"),
   ScanService: Symbol.for("com.marketgenerated.api.ScanService"),

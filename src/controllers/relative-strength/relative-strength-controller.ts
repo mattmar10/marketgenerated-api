@@ -141,7 +141,11 @@ export class RelativeStrengthController {
     const result =
       this.relativeStrengthSvc.getRelativeStrengthsForSymbol(ticker);
 
+    const fromSlope =
+      this.relativeStrengthSvc.getRelativeStrengthFromSlope(ticker);
+
     if (isRelativeStrengthsForSymbol(result)) {
+      result.relativeStrengthsFromSlope = fromSlope;
       res.json(result);
     } else {
       console.log(`Error getting relative strength for ${ticker}`);

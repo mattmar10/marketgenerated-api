@@ -44,6 +44,7 @@ export interface RelativeStrengthsForSymbol {
   industry?: string;
   sector?: string;
   relativeStrengths: RelativeStrength[];
+  relativeStrengthsFromSlope: RelativeStrengthsFromSlopeAggregate | undefined;
   relativeStrengthLine: RelativeStrengthLine;
   compositeScore: number;
   lastClose: number;

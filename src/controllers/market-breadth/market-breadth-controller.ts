@@ -40,6 +40,15 @@ export class MarketBreadthController {
     res.json(resp);
   }
 
+  @httpGet("/overview/snapshot")
+  public marketBreadthSnapshot(
+    @request() req: Request,
+    @response() res: Response
+  ) {
+    const resp = this.breadthService.getMarketBreadthSnapshot();
+    res.json(resp);
+  }
+
   @httpGet("/overview/exchange/:exchangeName")
   public marketBreadthExchange(
     @request() req: Request,
@@ -61,6 +70,25 @@ export class MarketBreadthController {
       }
     } else {
       res.status(400).send();
+    }
+  }
+
+  @httpGet("/overview/prime-trading")
+  public marketBreadthPrimeTrading(
+    @request() req: Request,
+    @response() res: Response
+  ) {
+    const marketBreadthOverview =
+      this.breadthService.getPrimeTradingMarketBreadthOverview();
+
+    if (marketBreadthOverview) {
+      const resp: MarketBreadthResponse = {
+        marketBreadthOverview,
+        generalMarketOverview: this.breadthService.getGeneralMarketOverview(),
+      };
+      res.json(resp);
+    } else {
+      res.status(404).send();
     }
   }
 
