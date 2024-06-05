@@ -244,6 +244,10 @@ export interface CurrentDayMarketBreadthSnapshotPoint {
   fiftyTwoWeekHighsLows?: FiftyTwoWeekHighsLowsDataPoint;
   upFourPercent?: number;
   downFourPercent?: number;
+  percentAboveTenEMA?: number;
+  percentAboveTwentyOneEMA?: number;
+  percentAboveFiftySMA?: number;
+  percentAboveTwoHundredSMA?: number;
   returns?: MarketReturnsDataPoint;
   totalStockCount: number;
 }
@@ -256,6 +260,7 @@ export interface CurrentDayMarketBreadthSnapshot {
   universeOverview: CurrentDayMarketBreadthSnapshotPoint;
   nyseOverview: CurrentDayMarketBreadthSnapshotPoint;
   nasdaqOverview: CurrentDayMarketBreadthSnapshotPoint;
+  primeTradingOverview: CurrentDayMarketBreadthSnapshotPoint;
   sectorsOverviews: SectorCurrentDayMarketBreadthSnapshot[];
 }
 

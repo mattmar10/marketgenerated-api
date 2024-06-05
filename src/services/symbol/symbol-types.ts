@@ -29,6 +29,17 @@ export type Quote = z.infer<typeof QuoteElementSchema>;
 
 export const QuoteArraySchema = QuoteElementSchema.array();
 
+export const EtfHoldingSchema = z.object({
+  asset: z.string(),
+  name: z.string(),
+  sharesNumber: z.number(),
+  weightPercentage: z.number(),
+});
+
+export type EtfHolding = z.infer<typeof EtfHoldingSchema>;
+
+export const EtfHoldingArraySchema = EtfHoldingSchema.array();
+
 export interface SymbolProfile {
   symbol: string;
   mktCap: number;

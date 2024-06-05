@@ -61,7 +61,7 @@ export class RealtimeQuoteService {
       }
     });
 
-    const numArrays = filteredStocks.length / 500;
+    const numArrays = filteredStocks.length / 250;
     const chunkSize = Math.ceil(filteredStocks.length / numArrays);
 
     for (let i = 0; i < filteredStocks.length; i += chunkSize) {

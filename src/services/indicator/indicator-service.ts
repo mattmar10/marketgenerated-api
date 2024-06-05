@@ -27,6 +27,13 @@ import {
   isMathError,
 } from "../../utils/math_utils";
 import { formatDateToEST } from "../../utils/epoch_utils";
+import {
+  calculateLinearRegression,
+  calculateLinearRegressionFromNumbers,
+  isLinearRegressionResult,
+} from "../../indicators/linear-regression";
+import { filterCandlesPast52Weeks } from "../../indicators/indicator-utils";
+import { atr } from "../../indicators/atr";
 
 export type IndicatorError = {
   message: string;
@@ -257,5 +264,143 @@ export class IndicatorsService {
         message: "No earnings data",
       });
     }
+  }
+
+  public expSlope(
+    candles: Candle[],
+    period: number
+  ): Either<IndicatorError, number> {
+    if (!candles || candles.length < period) {
+      return Left({ message: "Not enough candles for eslope" });
+    }
+    const filtered = filterCandlesPast52Weeks(candles);
+
+    if (filtered.length < period) {
+      return Left({
+        message: "Not enough candles after filtering for 52 weeks",
+      });
+    }
+
+    const lastCandles = filtered.slice(-period);
+    const mapped = lastCandles.map((c) => Math.log(c.close));
+    const linearReg = calculateLinearRegressionFromNumbers(
+      mapped,
+      mapped.length
+    );
+
+    if (!isLinearRegressionResult(linearReg)) {
+      return Left({ message: "error calculating linear regression" });
+    }
+
+    const raised = Math.pow(linearReg.slope, 252);
+    const result = (raised - 1) * 100;
+
+    return Right(result);
+  }
+
+  public expSlopeSeq(
+    candles: Candle[],
+    period: number
+  ): Either<IndicatorError, LinePoint[]> {
+    if (!candles || candles.length < period) {
+      return Left({ message: "Not enough candles for eslope" });
+    }
+    const filtered = filterCandlesPast52Weeks(candles);
+
+    if (filtered.length < period) {
+      return Left({
+        message: "Not enough candles after filtering for 52 weeks",
+      });
+    }
+
+    const timeseries: LinePoint[] = [];
+
+    for (let i = period; i <= filtered.length; i++) {
+      const periodCandles = filtered.slice(i - period, i);
+      const mapped = periodCandles.map((c) => Math.log(c.close));
+      const linearReg = calculateLinearRegressionFromNumbers(
+        mapped,
+        mapped.length
+      );
+
+      if (!isLinearRegressionResult(linearReg)) {
+        return Left({ message: "error calculating linear regression" });
+      }
+
+      const annualizedSlope = Math.pow(Math.exp(linearReg.slope), 252);
+      const result = (annualizedSlope - 1) * 100;
+
+      timeseries.push({
+        time: periodCandles[periodCandles.length - 1].dateStr!,
+        value: result,
+      });
+    }
+
+    return Right(timeseries);
+  }
+
+  public normalizedROC(candles: Candle[], lookback: number, atrPeriod: number) {
+    if (!candles || candles.length < lookback || candles.length < atrPeriod) {
+      return Left({ message: "Not enough candles for eslope" });
+    }
+
+    if (lookback < atrPeriod) {
+      return Left({ message: "lookback must be greater than atrPeriod" });
+    }
+
+    const filtered = filterCandlesPast52Weeks(candles);
+
+    const lastCandles = filtered.slice(-lookback);
+    const rise =
+      lastCandles[lastCandles.length - 1].close - lastCandles[0].close;
+    const roc = rise / lookback;
+
+    const atrResult = atr(lastCandles, atrPeriod);
+    const lastPoint = atrResult.timeseries[atrResult.timeseries.length - 1];
+
+    return Right(roc / lastPoint.value);
+  }
+
+  public normalizedROCSeq(
+    candles: Candle[],
+    lookback: number,
+    atrPeriod: number
+  ): Either<{ message: string }, LinePoint[]> {
+    if (!candles || candles.length < lookback || candles.length < atrPeriod) {
+      return Left({ message: "Not enough candles for eslope" });
+    }
+
+    if (lookback < atrPeriod) {
+      return Left({ message: "lookback must be greater than atrPeriod" });
+    }
+
+    const filtered = filterCandlesPast52Weeks(candles);
+
+    if (filtered.length < lookback || filtered.length < atrPeriod) {
+      return Left({
+        message: "Not enough candles after filtering for 52 weeks",
+      });
+    }
+
+    const timeseries: LinePoint[] = [];
+
+    for (let i = lookback; i <= filtered.length; i++) {
+      const periodCandles = filtered.slice(i - lookback, i);
+      const rise =
+        periodCandles[periodCandles.length - 1].close - periodCandles[0].close;
+      const roc = rise / lookback;
+
+      const atrResult = atr(periodCandles, atrPeriod);
+      const lastPoint = atrResult.timeseries[atrResult.timeseries.length - 1];
+
+      const normalizedROCValue = roc / lastPoint.value;
+
+      timeseries.push({
+        time: periodCandles[periodCandles.length - 1].dateStr!,
+        value: normalizedROCValue,
+      });
+    }
+
+    return Right(timeseries);
   }
 }

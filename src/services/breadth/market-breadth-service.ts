@@ -28,24 +28,23 @@ import {
 } from "../../controllers/overview/overview-responses";
 import {
   MovingAverageError,
+  calculateEMA,
   calculateSMA,
   ema,
   isMovingAverageError,
   sma,
   smaSeq,
 } from "../../indicators/moving-average";
-import { Ticker } from "../../MarketGeneratedTypes";
+import { Ticker, isRight } from "../../MarketGeneratedTypes";
 import { FMPSymbolProfileData } from "../financial_modeling_prep_types";
 import { DataError, isDataError } from "../data_error";
-import {
-  filterCandlesPast52Weeks,
-  filterCandlesPastWeeks,
-} from "../../indicators/indicator-utils";
+import { filterCandlesPast52Weeks } from "../../indicators/indicator-utils";
 import { RealtimeQuoteService } from "../realtime-quote-service";
 import { formatDateFromMillisecondsToEST } from "../../utils/epoch_utils";
-import { Quote } from "../symbol/symbol-types";
+import { EtfHolding, Quote } from "../symbol/symbol-types";
 import { calculateMean, calculateMedian } from "../../utils/math_utils";
-import { findMean } from "../../indicators/adr-percent";
+
+import { createObjectCsvWriter } from "csv-writer";
 
 const sectorsNameMap: Map<string, string> = new Map([
   ["utilities", "UTILITIES"],
@@ -66,6 +65,7 @@ export class MarketBreadthService {
   private marketBreadthOverview: NewMarketBreadthOverview;
   private nyseMarketBreadthOverview: NewMarketBreadthOverview;
   private nasdaqMarketBreadthOverview: NewMarketBreadthOverview;
+  private primeTradingMarketBreadthOverview: NewMarketBreadthOverview;
   private sectorBreadthOverview: Map<string, NewMarketBreadthOverview> =
     new Map();
   private generalMarketOverview: GeneralMarkeOverview;
@@ -73,6 +73,8 @@ export class MarketBreadthService {
 
   private tickerDailyData: Map<Ticker, DailyMarketBreadthPoint[]> = new Map();
   private tradingDates: string[] = [];
+  private sp1500Holdings: Ticker[] = [];
+  private primeTradingSymbols: Ticker[] = [];
 
   constructor(
     @inject(TYPES.DailyCacheService) private cacheSvc: DailyCacheService,
@@ -80,7 +82,7 @@ export class MarketBreadthService {
     @inject(TYPES.RealtimeQuoteService)
     private realtimQuoteService: RealtimeQuoteService
   ) {
-    console.log("building market overview");
+    console.log("building general market overview");
     this.generalMarketOverview = {
       rspSnapshot: this.buildETFSnapshot("RSP"),
       spySnapshot: this.buildETFSnapshot("SPY"),
@@ -89,25 +91,61 @@ export class MarketBreadthService {
       percentOfSuccesfulTenDayHighs:
         this.getPercentOfSuccessfulHighsTenDaysAgo(),
     };
-    this.buildDailyTickerData();
-    this.marketBreadthOverview = this.buildMarketBreadthFromDailyTickerData();
+
+    console.log("finished building general market overview");
+  }
+
+  public async initializeMarketBreadths() {
+    console.log("building market breadths");
+
+    const sp1500E = await this.symbolSvc.getEtfHoldings("SPTM");
+    const rspE = await this.symbolSvc.getEtfHoldings("RSP");
+
+    if (isRight(sp1500E) && isRight(rspE)) {
+      this.sp1500Holdings = sp1500E.value.map((s) => s.asset);
+      this.primeTradingSymbols = rspE.value.map((s) => s.asset);
+      this.buildDailyTickerData();
+      this.marketBreadthOverview = this.buildMarketBreadthFromDailyTickerData(
+        (s) =>
+          s !== null &&
+          s !== undefined &&
+          s.Symbol !== null &&
+          s.Symbol !== undefined &&
+          this.sp1500Holdings.includes(s.Symbol)
+      );
+
+      this.primeTradingMarketBreadthOverview =
+        this.buildMarketBreadthFromDailyTickerData(
+          (s) =>
+            s !== null &&
+            s !== undefined &&
+            s.Symbol !== null &&
+            s.Symbol !== undefined &&
+            this.primeTradingSymbols.includes(s.Symbol)
+        );
+    }
+
+    //this.marketBreadthOverview = this.buildMarketBreadthFromDailyTickerData();
     this.nasdaqMarketBreadthOverview =
       this.buildMarketBreadthFromDailyTickerData(
-        (s) => s.exchangeShortName === "NASDAQ"
+        (s) =>
+          s !== null &&
+          s !== undefined &&
+          s.Symbol !== null &&
+          s.Symbol !== undefined &&
+          s.exchangeShortName === "NASDAQ"
       );
     this.nyseMarketBreadthOverview = this.buildMarketBreadthFromDailyTickerData(
-      (s) => s.exchangeShortName === "NYSE"
+      (s) =>
+        s !== null &&
+        s !== undefined &&
+        s.Symbol !== null &&
+        s.Symbol !== undefined &&
+        s.exchangeShortName === "NYSE"
     );
-    //this.marketBreadthOverview = this.buildMarketBreadth();
-    //this.nyseMarketBreadthOverview = this.buildMarketBreadth(
-    //  (s) => s.exchangeShortName === "NYSE"
-    //);
-    // this.nasdaqMarketBreadthOverview = this.buildMarketBreadth(
-    //  (s) => s.exchangeShortName === "NASDAQ"
-    // );
 
     this.buildSectorBreadth();
-    console.log("finished building market overview");
+    console.log("finished building market breadths");
   }
 
   private buildSectorBreadth() {
@@ -128,7 +166,12 @@ export class MarketBreadthService {
         // );
         const sectorBreadthFromTickerData =
           this.buildMarketBreadthFromDailyTickerData(
-            (s) => s.sector === sector
+            (s) =>
+              s !== null &&
+              s !== undefined &&
+              s.Symbol !== null &&
+              s.Symbol !== undefined &&
+              s.sector === sector
           );
         this.sectorBreadthOverview.set(
           sector.toLowerCase().replace(/ /g, "-"),
@@ -443,21 +486,21 @@ export class MarketBreadthService {
       });
     }
 
-    const percentAboveTwentySMA = this.getPercentAboveSMALine(
+    const percentAboveTwentySMA = this.getPercentAboveMALine(
       universeOfStockKeys,
       20,
       startMillis,
       endMillis
     );
 
-    const percentAboveFiftySMA = this.getPercentAboveSMALine(
+    const percentAboveFiftySMA = this.getPercentAboveMALine(
       universeOfStockKeys,
       50,
       startMillis,
       endMillis
     );
 
-    const percentAboveTwoHundredSMA = this.getPercentAboveSMALine(
+    const percentAboveTwoHundredSMA = this.getPercentAboveMALine(
       universeOfStockKeys,
       200,
       startMillis,
@@ -570,10 +613,10 @@ export class MarketBreadthService {
     const currentDate = new Date();
 
     // Calculate the date 2 years and one day ago
-    const twoYearsOneDayAgo = new Date(
+    const twoYearsAgo = new Date(
       currentDate.getFullYear() - 2,
       currentDate.getMonth(),
-      currentDate.getDate() - 1,
+      currentDate.getDate(),
       currentDate.getHours(),
       currentDate.getMinutes(),
       currentDate.getSeconds(),
@@ -581,17 +624,21 @@ export class MarketBreadthService {
     );
 
     // Get the time in milliseconds
-    const startMillis = twoYearsOneDayAgo.getTime();
+    const startMillis = twoYearsAgo.getTime();
     const endMillis = currentDate.getTime();
 
     console.log("Building market breadth for all stocks");
 
     const stocks = this.symbolSvc.getStocks();
-    const universeOfStockKeys = stocks.map((s) => s.Symbol);
 
     const data: Map<string, DailyMarketBreadthPoint[]> = new Map();
 
-    for (const c of universeOfStockKeys) {
+    const allSymbols = [...this.sp1500Holdings, ...this.primeTradingSymbols];
+    const uniqueSymbols = new Set(allSymbols);
+
+    const uniqueTickers = Array.from(uniqueSymbols);
+
+    for (const c of uniqueTickers) {
       const candles: Candle[] = this.cacheSvc.getCandles(c);
       const filteredCandles = candles.filter(
         (c) => c.date >= startMillis && c.date <= endMillis
@@ -736,6 +783,15 @@ export class MarketBreadthService {
   private buildMarketBreadthFromDailyTickerData(
     fitlerFn: (symbol: FMPSymbolProfileData) => boolean = (_) => true
   ): NewMarketBreadthOverview {
+    type TempType = {
+      ticker: string;
+      volume: number;
+      close: number;
+      upVolume: number;
+      downVolume: number;
+    };
+    const yesterDayMap: TempType[] = [];
+    const todayMap: TempType[] = [];
     console.log("Building market breadth from ticker data");
     const dailyBreadthMap: Map<string, NewMarketBreadthPoint> = new Map();
     this.tradingDates.forEach((dateStr) => {
@@ -762,8 +818,41 @@ export class MarketBreadthService {
 
       this.tickerDailyData.forEach((data, ticker) => {
         const dayData = data.find((d) => d.dateStr === dateStr);
+
         if (dayData && fitlerFn(dayData.profile)) {
           tickersData.push(dayData);
+
+          if (dayData?.dateStr === "2024-05-13") {
+            const t: TempType = {
+              ticker: dayData.profile.Symbol,
+              volume: dayData.volume,
+              close: dayData.close,
+              upVolume:
+                dayData.advancingOrDeclining === "advancing"
+                  ? dayData.close * dayData.volume
+                  : 0,
+              downVolume:
+                dayData.advancingOrDeclining === "declining"
+                  ? dayData.close * dayData.volume
+                  : 0,
+            };
+            todayMap.push(t);
+          } else if (dayData?.dateStr === "2024-05-10") {
+            const t: TempType = {
+              ticker: dayData.profile.Symbol,
+              volume: dayData.volume,
+              close: dayData.close,
+              upVolume:
+                dayData.advancingOrDeclining === "advancing"
+                  ? dayData.close * dayData.volume
+                  : 0,
+              downVolume:
+                dayData.advancingOrDeclining === "declining"
+                  ? dayData.close * dayData.volume
+                  : 0,
+            };
+            yesterDayMap.push(t);
+          }
 
           if (dayData.advancingOrDeclining == "advancing") {
             advancing = advancing + 1;
@@ -847,16 +936,13 @@ export class MarketBreadthService {
 
         const adlNetRatio = Number(
           (
-            ((advancing.length - declining.length) /
-              Math.max(1, advancing.length + declining.length)) *
-            100
+            (advancing.length - declining.length) /
+            Math.max(1, advancing.length + declining.length)
           ).toFixed(2)
         );
 
         const hlNetRatio = Number(
-          (((fiftyTwoWeekHighs - fiftyTwoWeekLows) / totalCount) * 100).toFixed(
-            2
-          )
+          ((fiftyTwoWeekHighs - fiftyTwoWeekLows) / totalCount).toFixed(2)
         );
 
         const upDownRatio = upVolume / downVolume;
@@ -1252,9 +1338,13 @@ export class MarketBreadthService {
         const oneMonthAgoCandle = sorted[sorted.length - 20];
         const threeMonthAgoCandle = sorted[sorted.length - 60];
 
+        const oneDayChangePercent =
+          100 * ((quote.price - quote.previousClose) / quote.previousClose);
+
         const oneMonthChangePercent =
           100 *
           ((quote.price - oneMonthAgoCandle.close) / oneMonthAgoCandle.close);
+
         const threeMonthChangePercent =
           100 *
           ((quote.price - threeMonthAgoCandle.close) /
@@ -1269,10 +1359,10 @@ export class MarketBreadthService {
           downVolume = downVolume + quote.volume * quote.price;
         }
 
-        if (quote.changesPercentage > 4) {
+        if (oneDayChangePercent > 4) {
           upFourPercent = upFourPercent + 1;
         }
-        if (quote.changesPercentage < -4) {
+        if (oneDayChangePercent < -4) {
           downFourPercent = downFourPercent + 1;
         }
         if (oneMonthChangePercent > 25) {
@@ -1322,14 +1412,11 @@ export class MarketBreadthService {
     const median = calculateMedian(allReturns) as number;
 
     const adlNetRatio = Number(
-      (
-        ((advancing - declining) / Math.max(1, advancing + declining)) *
-        100
-      ).toFixed(2)
+      ((advancing - declining) / Math.max(1, advancing + declining)).toFixed(2)
     );
 
     const hlNetRatio = Number(
-      (((newFiftyTwoWeekHighs - newFiftyTwoWeekHighs) / count) * 100).toFixed(2)
+      ((newFiftyTwoWeekHighs - newFiftyTwoWeekHighs) / count).toFixed(2)
     );
 
     const upDownRatio = upVolume / downVolume;
@@ -1354,7 +1441,7 @@ export class MarketBreadthService {
     let cumulativeValue =
       cachedMarketBreadthOverview.advanceDeclineLine[
         cachedMarketBreadthOverview.advanceDeclineLine.length - 1
-      ].cumulative + globalDailyBreadth;
+      ].cumulative;
 
     cumulativeValue += advancing - declining;
     advanceDeclineLine.push({
@@ -1367,7 +1454,7 @@ export class MarketBreadthService {
     globalDailyBreadthLine.push({
       dateStr: currentDateStr,
       globalDailyBreadth: Number(globalDailyBreadth.toFixed(2)),
-      cumulative: Number(cumulativeGDB.toFixed(2)),
+      cumulative: Number((cumulativeGDB + globalDailyBreadth).toFixed(2)),
     });
 
     totalCountLine.push({
@@ -1487,7 +1574,10 @@ export class MarketBreadthService {
     //merging cached data with realtime data from today
     const merged: NewMarketBreadthOverview = {
       advanceDeclineLine: adl,
-      globalDailyBreadthLine: globalDailyBreadthLine,
+      globalDailyBreadthLine: [
+        ...cachedMarketBreadthOverview.globalDailyBreadthLine,
+        ...globalDailyBreadthLine,
+      ],
       marketReturnsLine: [
         ...cachedMarketBreadthOverview.marketReturnsLine,
         ...marketReturnsLine,
@@ -1576,6 +1666,19 @@ export class MarketBreadthService {
     }
   }
 
+  public getPrimeTradingMarketBreadthOverview():
+    | NewMarketBreadthOverview
+    | undefined {
+    const filterFn = (quote: Quote) =>
+      quote.symbol !== null &&
+      quote.symbol !== undefined &&
+      this.primeTradingSymbols.includes(quote.symbol);
+    return this.getRealtimeMarketBreadthOverview(
+      this.primeTradingMarketBreadthOverview,
+      filterFn
+    );
+  }
+
   public getSectorMarketBreadthOvervew(
     sector: string
   ): NewMarketBreadthOverview | undefined {
@@ -1618,11 +1721,28 @@ export class MarketBreadthService {
       (r) => r.dateStr === adlPoint.dateStr
     );
 
+    const aboveTenEMA = overview.percentAboveTenEMA.find(
+      (p) => p.dateStr === adlPoint.dateStr
+    );
+    const aboveTwentyOneEMA = overview.percentAboveTwentyOneEMA.find(
+      (p) => p.dateStr === adlPoint.dateStr
+    );
+    const aboveFiftySMA = overview.percentAboveFiftySMA.find(
+      (p) => p.dateStr === adlPoint.dateStr
+    );
+    const aboveTwoHundredSMA = overview.percentAboveTwoHundredSMA.find(
+      (p) => p.dateStr === adlPoint.dateStr
+    );
+
     const result: CurrentDayMarketBreadthSnapshotPoint = {
       advanceDecline: adlPoint,
       fiftyTwoWeekHighsLows: highsLow,
       upFourPercent: upFourPercent?.count,
       downFourPercent: downFourPercent?.count,
+      percentAboveTenEMA: aboveTenEMA?.percentAboveMA,
+      percentAboveTwentyOneEMA: aboveTwentyOneEMA?.percentAboveMA,
+      percentAboveFiftySMA: aboveFiftySMA?.percentAboveMA,
+      percentAboveTwoHundredSMA: aboveTwoHundredSMA?.percentAboveMA,
       returns: returnsPoint,
       totalStockCount: this.tickerDailyData.size,
     };
@@ -1633,6 +1753,14 @@ export class MarketBreadthService {
   public getMarketBreadthSnapshot(): CurrentDayMarketBreadthSnapshot {
     const universeOverview = this.getRealtimeMarketBreadthOverview(
       this.marketBreadthOverview
+    );
+
+    const ptFitler = (quote: Quote) =>
+      this.primeTradingSymbols.includes(quote.symbol);
+
+    const ptOverview = this.getRealtimeMarketBreadthOverview(
+      this.primeTradingMarketBreadthOverview,
+      ptFitler
     );
 
     const nasdaqOverview = this.getExchangeMarketBreadthOverview("nasdaq");
@@ -1655,6 +1783,8 @@ export class MarketBreadthService {
     return {
       universeOverview:
         this.getMarketBreadthSnapshotPointFromOverview(universeOverview),
+      primeTradingOverview:
+        this.getMarketBreadthSnapshotPointFromOverview(ptOverview),
       nasdaqOverview: this.getMarketBreadthSnapshotPointFromOverview(
         nasdaqOverview!
       ),
@@ -1691,24 +1821,25 @@ export class MarketBreadthService {
     };
   }
 
-  public getPercentAboveSMALine(
+  public getPercentAboveMALine(
     tickers: Ticker[],
     period: number,
     startDateInMillis: number,
-    endDateInMillis: number
+    endDateInMillis: number,
+    maType: "sma" | "ema" = "sma"
   ): PercentAboveSMALine | DataError {
     console.log("calculating percent above 50sma");
 
-    type SMADataPoint = {
+    type MADataPoint = {
       symbol: string;
       date: number;
       dateString: string;
       close: number;
-      smaValue: number;
+      maValue: number;
       percentFromSMA: number;
     };
 
-    let allDataPoints: SMADataPoint[] = [];
+    let allDataPoints: MADataPoint[] = [];
 
     for (const ticker of tickers) {
       const candles: Candle[] = this.cacheSvc.getCandles(ticker);
@@ -1725,14 +1856,17 @@ export class MarketBreadthService {
         return 0;
       });
 
-      const sma = calculateSMA(sorted, period);
+      const ma =
+        maType === "sma"
+          ? calculateSMA(sorted, period)
+          : calculateEMA(sorted, period);
 
-      if (isMovingAverageError(sma)) {
+      if (isMovingAverageError(ma)) {
         //console.log("Not enough candles to calculate SMA");
         continue;
       }
 
-      for (const t of sma.timeseries) {
+      for (const t of ma.timeseries) {
         const c = candles.find((c) => c.dateStr === t.time);
 
         if (!c || !c.dateStr) {
@@ -1743,20 +1877,20 @@ export class MarketBreadthService {
           (((c.close - t.value) / t.value) * 100).toFixed(2)
         );
 
-        const dataPoint: SMADataPoint = {
+        const dataPoint: MADataPoint = {
           symbol: ticker,
           date: c.date,
           dateString: c.dateStr!,
           close: c.close,
           percentFromSMA: percentAwayFromSMA,
-          smaValue: t.value,
+          maValue: t.value,
         };
 
         allDataPoints.push(dataPoint);
       }
     }
 
-    const groupedByDate: { [dateString: string]: SMADataPoint[] } =
+    const groupedByDate: { [dateString: string]: MADataPoint[] } =
       allDataPoints.reduce((result, dataPoint) => {
         const dateKey = dataPoint.dateString;
 
@@ -1767,7 +1901,7 @@ export class MarketBreadthService {
         result[dateKey].push(dataPoint);
 
         return result;
-      }, {} as { [dateString: string]: SMADataPoint[] });
+      }, {} as { [dateString: string]: MADataPoint[] });
 
     const percentAboveSMAArray: PercentAboveMAPoint[] = Object.entries(
       groupedByDate
@@ -1819,5 +1953,9 @@ export class MarketBreadthService {
     return Number(
       (100 * (stillAboveTenDayighTenDaysAgo / atHighTenDaysAgo)).toFixed(2)
     );
+  }
+
+  public getRSPHoldings() {
+    return this.primeTradingSymbols;
   }
 }

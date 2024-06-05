@@ -73,6 +73,25 @@ export class MarketBreadthController {
     }
   }
 
+  @httpGet("/overview/prime-trading")
+  public marketBreadthPrimeTrading(
+    @request() req: Request,
+    @response() res: Response
+  ) {
+    const marketBreadthOverview =
+      this.breadthService.getPrimeTradingMarketBreadthOverview();
+
+    if (marketBreadthOverview) {
+      const resp: MarketBreadthResponse = {
+        marketBreadthOverview,
+        generalMarketOverview: this.breadthService.getGeneralMarketOverview(),
+      };
+      res.json(resp);
+    } else {
+      res.status(404).send();
+    }
+  }
+
   @httpGet("/overview/sector/:sectorName")
   public marketBreadthSector(
     @request() req: Request,
